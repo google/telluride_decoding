@@ -45,8 +45,6 @@ import six
 from six.moves import range
 import tensorflow as tf
 
-from google.cloud import storage
-
 FLAGS = flags.FLAGS
 
 # Data parameters
