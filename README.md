@@ -7,6 +7,12 @@ from brain data.  The perceptual signals we are using are generally audio
 features.  And the brain data is one of several types of signals, such as EEG,
 MEG and ECoG.
 
+The Telluride Decoding Toolbox is geared towards large-scale decoding
+experiments. You can
+run small experiments in a colab. But this package keeps all the data in
+files so the data doesn't have to fit into memory, and so it is easier to run
+tens or hundreds of tests in parallel.
+
 ## License
 
 This code uses the Apache License 2.0. See the LICENSE file for details.
@@ -34,12 +40,20 @@ attended audio signal.
 Documentation to follow (but there are extensive comments in the code.) The
 three primary parts of this code are:
 
-* decoding: Used to build, train and test models that connect audio and brain
-signals.
 * ingest: Use to read various kinds of file formats and transform the data into
 TFRecords for use by the decoding program
-* add_triggers: Used to add (randomly timed) trigger signals to an audio file
-so the audio can be synced to the brain recordings
+* decoding: Used to build, train and test models that connect audio and brain
+signals.
+* infer: Use to run a model on real or test data.  This model can run in real
+time.
+
+## To install
+To install this software you can execute this command, which will automatically
+install the necessary prerequisites:
+
+```
+pip install telluride-decoding
+```
 
 ## Using this code
 This library is written in Python (2 or 3) and uses Tensorflow. The
@@ -51,12 +65,12 @@ Documentation on the standalone decoding program can be found
 where one might want to do a parameter search.  Each run of the program
 tests one set of parameters.
 
-One can also use the program as a librar in a Colab. Colab allows one to
+One can also use the program as a library in a Colab. Colab allows one to
 interactively ingest data, build models, and test their performance. Here are
 some examples:
 
 * Telluride4: Ingest and test linear regression.
-[colab](https://colab.research.google.com/drive/1qZzLEsstkNs8FpClmo4Hq03lNdIuvmPz)
+[colab](https://colab.sandbox.google.com/drive/1VDbHlClIMBNvlneN8gZ8cmxsFWxi4u7T)
 
 
 The code uses CPU or GPUs, as available. TPU support is forthcoming.
@@ -70,14 +84,14 @@ Single-Trial EEG.
 _Cereb Cortex_. 2015 Jul;25(7):1697-706.
 
 
-Daniel D.E. Wong,  Søren A. Fuglsang,  Jens Hjortkjær, Enea Ceolini,  
+Daniel D.E. Wong,  Søren A. Fuglsang,  Jens Hjortkjær, Enea Ceolini,
 Malcolm Slaney, Alain de Cheveigné.
-A Comparison of Temporal Response Function Estimation Methods for 
+A Comparison of Temporal Response Function Estimation Methods for
 Auditory Attention Decoding.
 _Frontiers in Neuroscience_. doi: 10.3389/fnins.2018.00531.
 
 This package contains Python and Tensorflow code for the Deep Canonical
-Correlation Analysis algorithm. (An earlier MATLAB implementation can be 
+Correlation Analysis algorithm. (An earlier MATLAB implementation can be
 found at https://ttic.uchicago.edu/~wwang5/dccae.html)
 
 Wang, Weiran and Arora, Raman and Livescu, Karen and Bilmes, Jeff.
@@ -89,3 +103,4 @@ Andrew, Galen and Arora, Raman and Bilmes, Jeff and Livescu, Karen.
 Deep canonical correlation analysis.
 _International conference on machine learning_, pp. 1247-1255,
 2013. https://ttic.uchicago.edu/~klivescu/papers/andrew_icml2013.pdf
+

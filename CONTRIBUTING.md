@@ -1,4 +1,4 @@
-# How to Contribute to brain_decoding
+# How to Contribute to telluride_decoding
 
 We'd love to accept your patches and contributions to this project. There are
 just a few small guidelines you need to follow. Our goal is to create a set of

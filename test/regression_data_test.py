@@ -1,0 +1,93 @@
+# Lint as: python2 python3
+"""Test for telluride_decoding.regression_data."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import os
+
+from absl import flags
+from absl.testing import absltest
+
+from telluride_decoding import brain_data
+from telluride_decoding import regression_data
+
+import tensorflow.compat.v2 as tf
+
+# Note these tests do NOT test the data download cdoe.  These are hard to test,
+# only run occasionally, and are obvious when they don't work in real use.
+
+
+class TellurideDataTest(absltest.TestCase):
+
+  def setUp(self):
+    super(TellurideDataTest, self).setUp()
+    self._test_data_dir = os.path.join(
+        flags.FLAGS.test_srcdir, '__main__',
+        'test_data/')
+
+  def test_data_ingestion(self):
+    cache_dir = os.path.join(self._test_data_dir, 'telluride4')
+    tmp_dir = self.create_tempdir().full_path
+    tf_dir = os.path.join(tmp_dir, 'telluride4_tf')
+
+    # Create the data object and make sure we have the downloaded archive file.
+    rd = regression_data.RegressionDataTelluride4()
+    self.assertTrue(rd.is_data_local(cache_dir))
+
+    # Now ingest the data, making sure it's not present at start, then present.
+    self.assertFalse(rd.is_data_ingested(tmp_dir))
+    rd.ingest_data(cache_dir, tf_dir, 128)
+    self.assertTrue(rd.is_data_ingested(tf_dir))
+
+    # Check the data files.
+    test_file = os.path.join(tf_dir, 'trial_01.tfrecords')
+    features = brain_data.discover_feature_shapes(test_file)
+    print('Telluride features:', features)
+    self.assertIn('eeg', features)
+    self.assertEqual(features['eeg'].shape, [63])
+    self.assertIn('intensity', features)
+    self.assertEqual(features['intensity'].shape, [1])
+
+    self.assertEqual(brain_data.count_tfrecords(test_file), (8297, False))
+
+
+class JensMemoryDataTest(absltest.TestCase):
+
+  def setUp(self):
+    super(JensMemoryDataTest, self).setUp()
+    self._test_data_dir = os.path.join(
+        flags.FLAGS.test_srcdir, '__main__',
+        'test_data/')
+
+  def test_data_ingestion(self):
+    cache_dir = os.path.join(self._test_data_dir, 'jens_memory')
+    tmp_dir = self.create_tempdir().full_path
+    tf_dir = os.path.join(tmp_dir, 'jens_memory')
+    num_subjects = 1   # Only 1 of 22 subjects loaded for test.
+    num_trials = 5   # That one subject has been shortened to 5/40 trials.
+
+    # Create the data object and make sure we have the downloaded archive file.
+    rd = regression_data.RegressionDataJensMemory()
+    self.assertTrue(rd.is_data_local(cache_dir, num_subjects))
+
+    # Now ingest the data, making sure it's not present at start, then present.
+    self.assertFalse(rd.is_data_ingested(tmp_dir, num_subjects))
+    rd.ingest_data(cache_dir, tf_dir, 128)
+    self.assertTrue(rd.is_data_ingested(tf_dir, num_subjects, num_trials))
+
+    # Check the data files.
+    test_file = os.path.join(tf_dir, 'subject_01', 'trial_01.tfrecords')
+    features = brain_data.discover_feature_shapes(test_file)
+    self.assertIn('eeg', features)
+    self.assertEqual(features['eeg'].shape, [69])
+    self.assertIn('intensity', features)
+    self.assertEqual(features['intensity'].shape, [1])
+
+    self.assertEqual(brain_data.count_tfrecords(test_file), (7442, False))
+
+
+if __name__ == '__main__':
+  tf.compat.v1.enable_v2_behavior()
+  absltest.main()

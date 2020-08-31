@@ -1,4 +1,4 @@
-# Brain_decoding Library - decoding.py
+# telluride_decoding Library - decoding.py
 This program is used to build, train, and test decoding models. It usually takes as
 input a TFRecord file that contains perceptual (audio) features and
 brain signals (EEG, MEG, or ECoG).  
