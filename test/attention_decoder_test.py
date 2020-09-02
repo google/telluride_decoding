@@ -225,7 +225,7 @@ class StateAttentionDecoderTest(absltest.TestCase):
     # analysis. The ad.k_w is the window size of the number of correlation
     # values that are used to make a single attentional state decision so the
     # first decoded attentional state corresponds to the 100+ad.k_w true_state
-    # (this is complicated a bit when using forward lags because the the first
+    # (this is complicated a bit when using forward lags because the first
     # decoded attentional state would correspond to the 100+ad.k_w-ad.k_f th
     # true_state).
 
