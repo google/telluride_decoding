@@ -496,7 +496,8 @@ class Telluride4Linear(RegressionLinear):
 
   def preset_flags(self):
     super(Telluride4Linear, self).preset_flags()
-    self.my_flags.tfexample_dir = ('test_data/'
+    self.my_flags.tfexample_dir = (self.my_flags.tfexample_dir or
+                                   'test_data/'
                                    'tf_dir/telluride4_64Hz')
 
 
@@ -504,7 +505,8 @@ class Telluride4CCA(RegressionCCA):
 
   def preset_flags(self):
     super(Telluride4CCA, self).preset_flags()
-    self.my_flags.tfexample_dir = ('test_data/'
+    self.my_flags.tfexample_dir = (self.my_flags.tfexample_dir or
+                                   'test_data/'
                                    'tf_dir/telluride4_64Hz')
 
 
