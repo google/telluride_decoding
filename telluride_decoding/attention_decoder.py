@@ -1,4 +1,3 @@
-# Lint as: python2 python3
 """AttentionDecoderCorr takes an array of correlations and outputs attention.
 
 
@@ -16,10 +15,6 @@ A State-Space Model for Decoding Auditory Attentional Modulation from MEG in a
 Competing-Speaker Environment, 2014 Neural Information Processing Systems,
 Dec 2014, Montreal, QC, Canada.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import itertools
 import matplotlib.patches as patches

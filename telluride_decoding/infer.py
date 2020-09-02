@@ -1,14 +1,23 @@
-# Lint as: python2 python3
+# Copyright 2020 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Code to read a model, and test attention switching.
 
 This code reads a precomputed model file, and tests the AAD/SSD performance
 using a test file. The code creates summary plots and calculates final accuracy.
 """
-
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import collections
 import numbers
@@ -26,7 +35,6 @@ matplotlib.use('Agg')    # Needed for plotting to a file, before the next import
 import matplotlib.pyplot as plt
 
 import numpy as np
-import six
 
 from telluride_decoding import attention_decoder
 from telluride_decoding import brain_data
@@ -113,11 +121,11 @@ def create_brain_data(tf_dir, train_files, test_files, params, audio_label):
   Returns:
     A BrainData object, from which we can then select train or testing files.
   """
-  if isinstance(train_files, six.string_types):
+  if isinstance(train_files, str):
     train_files = [train_files,]
   train_file_re = '|'.join(['%s' % s for s in train_files])
 
-  if isinstance(test_files, six.string_types):
+  if isinstance(test_files, str):
     test_files = [test_files,]
   test_file_re = '|'.join(['%s' % s for s in test_files])
 

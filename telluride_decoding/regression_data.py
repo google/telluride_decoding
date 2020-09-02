@@ -1,26 +1,21 @@
-# Lint as: python2 python3
 """Class for downloading and ingestion of data for running regression tests.
 
 The output of these classes is a directory of TFRecord files ready for
 decoding experiments.
 
 Note, this code assumes the following data flow
-Internet data file -> Download -> cache_dir (local copy of original data)
-cache_dir -> Ingestion -> tf_dir (tfrecord files ready for decoding exps)
+  Internet data file -> Download -> cache_dir (local copy of original data)
+  cache_dir -> Ingestion -> tf_dir (tfrecord files ready for decoding exps)
 
-blaze run :regression_data -- --type 'jens_memory'
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 import re
 import sys
 import tempfile
 import typing
-
+import urllib
 
 from absl import app
 from absl import flags
@@ -31,8 +26,6 @@ import pandas as pd
 import pyedflib
 import requests
 import scipy.io as spio
-import six
-from six.moves import urllib_parse
 
 from telluride_decoding import brain_data
 from telluride_decoding import ingest
@@ -132,8 +125,8 @@ def download_from_gdrive(url, output, debug=False):
 
   def parse_url(url):
     """Parse URL for gdrive ID."""
-    parsed = urllib_parse.urlparse(url)
-    query = urllib_parse.parse_qs(parsed.query)
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query)
     is_gdrive = parsed.hostname == 'drive.google.com'
     is_download_link = parsed.path.endswith('/uc')
 
@@ -170,8 +163,9 @@ def download_from_gdrive(url, output, debug=False):
       m = re.search('"downloadUrl":"([^"]+)', line)
       if m:
         url = m.groups()[0]
-        url = url.replace('\\u003d', '=')
-        url = url.replace('\\u0026', '&')
+        if url:
+          url = url.replace('\\u003d', '=')
+          url = url.replace('\\u0026', '&')
         return url
 
   url_origin = url
@@ -195,10 +189,13 @@ def download_from_gdrive(url, output, debug=False):
   if output is None:
     if file_id and is_download_link:
       m = re.search('filename="(.*)"', res.headers['Content-Disposition'])
-      output = m.groups()[0]
+      if m:
+        output = m.groups()[0]
+      else:
+        raise ValueError('Can not parse headers: %s' % res)
     else:
       output = os.path.basename(url)
-  output_is_path = isinstance(output, six.string_types)
+  output_is_path = isinstance(output, str)
 
   if debug:
     logging.info('Downloading...')
@@ -217,6 +214,8 @@ def download_from_gdrive(url, output, debug=False):
     tmp_file = None
     f = output
 
+  if not f:
+    raise ValueError('Can not open output file: %s' % output)
   try:
     total = res.headers.get('Content-Length')
     chunk_size = 512 * 1024  # 512KB
@@ -235,7 +234,7 @@ def download_from_gdrive(url, output, debug=False):
     try:
       if tmp_file:
         tf.io.gfile.remove(tmp_file)
-    except OSError:
+    except OSError as e:
       print(e, file=regression_data_print)
     except tf.errors.NotFoundError:
       pass

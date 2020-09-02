@@ -1,4 +1,3 @@
-# Lint as: python2 python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,10 +31,6 @@ Example command line:
   --input2_pre_context=3 --input2_post_context=3 --post_context=3
 
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import os
 import sys
@@ -45,7 +40,6 @@ from absl import flags
 from absl import logging
 
 import numpy as np
-import six
 from telluride_decoding import brain_data
 from telluride_decoding import csv_util
 from telluride_decoding import decoding
@@ -239,7 +233,7 @@ def jackknife_one_model(test_brain_data,
   if summary_file:
     print('Writing summary data for one jackknife:', log_entry,
           file=regression_print)
-    if isinstance(summary_file, six.string_types):
+    if isinstance(summary_file, str):
       with tf.io.gfile.GFile(summary_file, 'a') as fp:
         fp.write(log_entry)
         logging.info('Wrote jackknife summary results to %s', summary_file)
@@ -271,7 +265,7 @@ def parse_regularization_values(mode_string):
   """Returns list of regularization values for different modes."""
   if isinstance(mode_string, float):
     return [mode_string,]
-  if not isinstance(mode_string, six.text_type):
+  if not isinstance(mode_string, str):
     raise TypeError('Parse_regularization_values needs a comma-separated' +
                     ' string, not a %s' % mode_string)
   mode_string = mode_string.lower()
@@ -307,6 +301,7 @@ class Regression(object):
       raise TypeError('Regression init needs a DecodingOptions object, ' +
                       'not %s.' % type(my_flags))
     self.my_flags = my_flags or decoding.DecodingOptions().set_flags()
+    self.test_name = 'Regression Test Object'
 
   @property
   def model_type(self):

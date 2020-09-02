@@ -1,4 +1,3 @@
-# Lint as: python2 python3
 # Copyright 2019-2020 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,17 +20,12 @@ or vice versa.
 
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import datetime
 import json
 import os
 
 from absl import logging
 import numpy as np
-import six
 
 import tensorflow.compat.v2 as tf
 # User should call tf.compat.v1.enable_v2_behavior()
@@ -294,10 +288,10 @@ class BrainModel(tf.keras.models.Model):
       subdir: A string indicating the sub directory to store the event.
       step: Which time step to associate with the result.
     """
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise TypeError('Tensorboard name must be a string, not a %s.' %
                       type(name))
-    if not isinstance(subdir, six.string_types):
+    if not isinstance(subdir, str):
       raise TypeError('Tensorboard subdir must be a string, not a %s.' %
                       type(subdir))
     if self._tensorboard_dir:

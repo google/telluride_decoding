@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,12 +38,6 @@ BrainExperiment: All the data about a number of trials, allowing one to grab
 all the data, z-score the data, and summarize the experiment.
 """
 
-# TODO fix left over lint errors.
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import os
 import pickle
@@ -59,8 +52,6 @@ import pyedflib
 import scipy.io.wavfile
 import scipy.signal
 import scipy.stats
-import six
-from six.moves import range
 import tensorflow.compat.v2 as tf
 # User should call tf.compat.v1.enable_v2_behavior()
 
@@ -81,7 +72,7 @@ class BrainSignal(object):
 
   def __init__(self, name, signal, sample_rate, data_type=None):
     # Signal has size of num_times x num_channels.
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise ValueError('name should be a string or unicode.')
     signal = np.asarray(signal)
     if not sample_rate > 0.0:
@@ -287,7 +278,7 @@ class BrainTrial(object):
       name: The name of the feature.
       data: Data which can be transformed into a np array.
     """
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise TypeError('Feature name must be a string, not a %s' % type(name))
     if not self._model_features:
       self._model_features = {}
@@ -739,13 +730,13 @@ class EdfBrainDataFile(BrainDataFile):
     return self._edf_dict['labels']
 
   def signal_values(self, name):
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise ValueError('Must search for values with a string name.')
     channel_number = self.find_channel_index(name)
     return self._edf_dict['signals'][channel_number]
 
   def signal_fs(self, name):
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise TypeError('Signal\'s name must be a string (or unicode).')
     channel_number = self.find_channel_index(name)
     return self._edf_dict['sample_rates'][channel_number]

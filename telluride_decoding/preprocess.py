@@ -1,4 +1,18 @@
-# Lint as: python2 python3
+# Copyright 2020 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Preprocesses multivariate stimulus/brain data prior to shuffling.
 
 This code generates classes that implement several data preprocessing steps
@@ -27,19 +41,12 @@ glitch removal will be included later.
   processed_eeg = p.process(eeg)
 """
 
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import re
 
 from absl import flags
 from absl import logging
 import numpy as np
 import scipy.signal
-import six
-from six.moves import range
 
 FLAGS = flags.FLAGS
 
@@ -150,7 +157,7 @@ class Preprocessor(object):
     elif isinstance(channel_numbers, list):
       self._channel_numbers = channel_numbers
 
-    elif isinstance(channel_numbers, six.string_types):
+    elif isinstance(channel_numbers, str):
       if ',' in channel_numbers:
         channel_numbers = channel_numbers.split(',')
       else:
@@ -245,7 +252,7 @@ class Preprocessor(object):
                    lowpass_cutoff, lowpass_order, ref_channels, channels_to_ref,
                    channel_numbers, data_std, pre_context, post_context):
     """Checks correctness of parameters passed as input."""
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise TypeError('name must be a string, not %s' % name)
     if fs_in <= 0:
       raise ValueError('fs_in should not be less than 0.')
@@ -610,7 +617,7 @@ class AudioFeatures(object):
 
   def check_params(self, name, fs_in, fs_out, window):
     """Checks correctness of parameters passed as input."""
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise TypeError('name must be a string, not %s' % name)
     if fs_in <= 0:
       raise ValueError('fs_in should not be less than 0.')

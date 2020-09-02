@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,6 @@ TF models and code to predict MEG/EEG signals from their input audio features,
 or vice versa.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import random
 import re
@@ -32,7 +27,6 @@ import sys
 from absl import logging
 
 import numpy as np
-import six
 
 from telluride_decoding import preprocess
 import tensorflow.compat.v2 as tf
@@ -129,10 +123,10 @@ class BrainData(object):
     if post_context < 0:
       raise ValueError('post_context must be >= 0')
 
-    if isinstance(in_fields, six.string_types):
+    if isinstance(in_fields, str):
       in_fields = [in_fields,]
     self.in1_fields = in_fields
-    if isinstance(in2_fields, six.string_types) and in2_fields:
+    if isinstance(in2_fields, str) and in2_fields:
       in2_fields = [in2_fields,]
     self.in2_fields = in2_fields
     self.out_field = out_field
@@ -436,7 +430,7 @@ class BrainData(object):
       fields = self.in2_fields
     logging.info('input_fields_width (%d) type(in_fields) is %s with value %s',
                  input_number, type(fields), fields)
-    if isinstance(fields, six.string_types) and fields:
+    if isinstance(fields, str) and fields:
       fields = [fields,]
     if fields:
       for k in fields:
@@ -567,7 +561,7 @@ class TFExampleData(BrainData):
 
     logging.info('Reading TFExample data from %s, filtering for **%s**',
                  self.data_dir, self.data_pattern)
-    if not isinstance(self.data_dir, six.string_types):
+    if not isinstance(self.data_dir, str):
       raise TypeError('data_dir must be a string, not a %s (**%s**)' %
                       (type(self.data_dir), self.data_dir))
     self._cached_file_names = []
@@ -787,7 +781,7 @@ def discover_feature_shapes(tfrecord_file_name):
   Raises:
     TypeError for bad parameter values.
   """
-  if not isinstance(tfrecord_file_name, six.string_types):
+  if not isinstance(tfrecord_file_name, str):
     raise TypeError('discover_feature_shapes: input must be a string filename.')
 
   dataset = tf.data.TFRecordDataset(tfrecord_file_name)
@@ -829,7 +823,7 @@ def count_tfrecords(tfrecord_file_name):
   Raises:
     TypeError for bad parameter values.
   """
-  if not isinstance(tfrecord_file_name, six.string_types):
+  if not isinstance(tfrecord_file_name, str):
     raise TypeError('tfrecord_file_name must be a string.')
 
   dataset = tf.data.TFRecordDataset(tfrecord_file_name)
@@ -892,7 +886,7 @@ def create_brain_dataset(data_type, in_fields, out_field, frame_rate,
   Returns:
     The desired type of BrainData
   """
-  if not isinstance(data_type, six.string_types):
+  if not isinstance(data_type, str):
     raise TypeError('create_brain_dataset type must be a string.')
   if frame_rate <= 0:
     raise ValueError('frame_rate must be greater than 0.')

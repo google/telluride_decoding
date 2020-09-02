@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,6 @@ Use two sets (x1 and x2) of random data, but copy one column from x1 to x2 so
 there is a hard dependency, and another column of x2 is partially dependent on
 x1.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from absl import flags
 from absl.testing import absltest

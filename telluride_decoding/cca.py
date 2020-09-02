@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,6 @@ Code, originally from Wieran Wang, that implements canonical correlation
 analysis using both numpy (to precompute the best solution) and TF (to optimize
 either the linear or non-linear version of) CCA.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from absl import logging
 

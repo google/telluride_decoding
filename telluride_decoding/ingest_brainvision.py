@@ -1,4 +1,18 @@
-# Lint as: python2 python3
+# Copyright 2020 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Ingest the native BrainVision data format.
 
 This consists of three file types:
@@ -10,16 +24,11 @@ See the detailed file specification at:
   https://www.brainproducts.com/filedownload.php?path=products/more/BrainVisionCoreDataFormat_1-0.pdf
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import os
 import re
 
 import numpy as np
-import six
 from telluride_decoding import ingest
 import tensorflow.compat.v2 as tf
 # User should call tf.compat.v1.enable_v2_behavior()
@@ -148,7 +157,7 @@ class BvBrainDataFile(ingest.BrainDataFile):
             for k in channel_keys]
 
   def signal_values(self, name):
-    if not isinstance(name, six.string_types):
+    if not isinstance(name, str):
       raise ValueError('Must search for values with a string name.')
     channel_index = self.find_channel_index(name)
     channel_resolution = self.find_channel_resolution(name)

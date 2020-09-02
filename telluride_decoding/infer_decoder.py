@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2020 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,17 +56,12 @@ training step, along with the basic correlation statistics, is calculated by
 the train method.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import json
 import os
 from absl import logging
 
 import numpy as np
-import six
 
 from telluride_decoding import brain_data
 from telluride_decoding import result_store
@@ -264,8 +258,7 @@ class Decoder(object):
     Raises:
       TypeError: For incorrect input arguments.
     """
-    if not saved_model_file or not isinstance(saved_model_file,
-                                              six.string_types):
+    if not saved_model_file or not isinstance(saved_model_file, str):
       raise TypeError('Must provide a file name (string) to load-model, not '
                       'a %s.' % type(saved_model_file))
     if object_dict and not isinstance(object_dict, dict):

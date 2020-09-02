@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,6 @@
 """Tests for the decoding part of the library.
 
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 
 from absl import flags

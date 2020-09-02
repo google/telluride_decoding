@@ -1,4 +1,18 @@
-# Lint as: python2 python3
+# Copyright 2020 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Code to save a signal stored as a numpy array, and return it (in parts).
 
 This file implements three classes that make it easy to store and retrieve
@@ -13,10 +27,6 @@ NumpyStore: Basic storage of one signal
 WindowedDataStore: Above, plus retrieve pieces (windows) of the data
 TwoResultStore: Two of the WindowedDataStore, for two signals.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from absl import logging
 import numpy as np
