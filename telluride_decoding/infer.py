@@ -72,7 +72,7 @@ flags.DEFINE_string('save_results_csv', None,
 flags.DEFINE_multi_string('training_file', [],
                           'Training files to calculate parameters for the final'
                           'decoding test.')
-flags.DEFINE_string('test_file', default_test_file,
+flags.DEFINE_string('infer_test_file', default_test_file,
                     'Testing file to evaluate with which to verify '
                     'performance.')
 
@@ -459,7 +459,7 @@ def run_comparison_test(model_dir, tf_dir, training_file, test_file,
   if plot_dir:
     plt.xlabel('Window Size (frames)')
     plt.ylabel('Fraction correct')
-    plt.title('Testing with %s' % os.path.split(FLAGS.test_file)[1])
+    plt.title('Testing with %s' % os.path.split(FLAGS.infer_test_file)[1])
     plt.legend()
 
     plot_file = os.path.join(FLAGS.plot_dir, 'test_results-comparison.png')
@@ -482,13 +482,13 @@ def main(argv):
   print('FLAGS.reduction is', FLAGS.reduction)
   if FLAGS.comparison_test:
     run_comparison_test(FLAGS.model_dir, FLAGS.tf_dir,
-                        FLAGS.training_file, FLAGS.test_file,
+                        FLAGS.training_file, FLAGS.infer_test_file,
                         FLAGS.audio_label, FLAGS.audio_label + '2',
                         FLAGS.plot_dir,
                         reduction_list=['first', 'lda'])
   else:
     run_reduction_test(FLAGS.model_dir, FLAGS.tf_dir, FLAGS.training_file,
-                       FLAGS.test_file, FLAGS.reduction, FLAGS.decoder,
+                       FLAGS.infer_test_file, FLAGS.reduction, FLAGS.decoder,
                        FLAGS.audio_label, FLAGS.audio_label + '2',
                        FLAGS.plot_dir)
 

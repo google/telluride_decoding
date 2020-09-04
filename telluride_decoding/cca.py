@@ -161,6 +161,7 @@ class BrainCcaLayer(tf.keras.layers.Layer):
                      axis=1, name='ConcatenateCcaResults')
 
   def get_config(self):
+    """Defines the parameters needed when re-creating this layer."""
     return {'requested_cca_dims': self.output_dims,
            }
 

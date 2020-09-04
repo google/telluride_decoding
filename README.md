@@ -5,7 +5,7 @@
 This repository contains Python/Tensorflow code to decode perceptual signals
 from brain data.  The perceptual signals we are using are generally audio
 features.  And the brain data is one of several types of signals, such as EEG,
-MEG and ECoG.
+MEG and ECoG. 
 
 The Telluride Decoding Toolbox is geared towards large-scale decoding
 experiments. You can
@@ -56,7 +56,7 @@ pip install telluride-decoding
 ```
 
 ## Using this code
-This library is written in Python (2 or 3) and uses Tensorflow. The
+This library is written in Python3 and uses Tensorflow2. The
 decoding code can be run as a standalone program, or as a library, in for
 instance a [Colab](https://colab.research.google.com).
 
@@ -66,11 +66,11 @@ where one might want to do a parameter search.  Each run of the program
 tests one set of parameters.
 
 One can also use the program as a library in a Colab. Colab allows one to
-interactively ingest data, build models, and test their performance. Here are
-some examples:
+interactively ingest data, build models, and test their performance. Here is
+an example:
 
 * Telluride4: Ingest and test linear regression.
-[colab](https://colab.sandbox.google.com/drive/1VDbHlClIMBNvlneN8gZ8cmxsFWxi4u7T)
+[colab](https://colab.research.google.com/drive/1WH08jJ1on6h0z8QLPaNHQmQUUBPzMgdi)
 
 
 The code uses CPU or GPUs, as available. TPU support is forthcoming.

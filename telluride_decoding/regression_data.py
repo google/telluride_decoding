@@ -322,7 +322,6 @@ class RegressionDataTelluride4(RegressionData):
 
     make_if_not_exists(tf_dir)
     trial_dict = {}
-    all_ingested_files = []
     for i in range(eeg_signals_count):
       sound_dict = {
           'intensity':
