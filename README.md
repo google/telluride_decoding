@@ -70,7 +70,7 @@ interactively ingest data, build models, and test their performance. Here is
 an example:
 
 * Telluride4: Ingest and test linear regression.
-[colab](https://colab.research.google.com/drive/1WH08jJ1on6h0z8QLPaNHQmQUUBPzMgdi)
+[colab](https://colab.sandbox.google.com/github/google/telluride_decoding/blob/master/Telluride_Decoding_Toolbox_TF2_Demo.ipynb)
 
 
 The code uses CPU or GPUs, as available. TPU support is forthcoming.
