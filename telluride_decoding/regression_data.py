@@ -734,7 +734,7 @@ flags.DEFINE_enum('type', 'telluride4',
 
 def main(argv):
   if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+    raise app.UsageError('Too many command-line arguments: %s.' % argv)
 
   database = locations[FLAGS.type]
   data_object = database.data_type()

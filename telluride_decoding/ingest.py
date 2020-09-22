@@ -36,6 +36,37 @@ data is stored. This is read by the BrainTrial code.
 
 BrainExperiment: All the data about a number of trials, allowing one to grab
 all the data, z-score the data, and summarize the experiment.
+
+This code provides tools to read directy from recorded EDF files, associating
+them with sound files, and then writing everything out as tfrecord files.
+
+A simpler path uses your own python code to accumulate the different signals,
+and then uses the following template to write out the overall tfrecord files. In
+this example, the feature data (eeg or audio) are stored in arrays called
+f1_data and f2_data, which are num_samples x num_feature_dimensions.  Any
+number of feature maps can be used (only 2 are used here.) And the /tmp
+parameters are just dummy parameters since all the data is in-memory
+numpy arrays.
+
+  trial_dict = {}
+  for i in range(len(bv_data)):
+    # Each trial is described in a list of a sound and zero+ EEG recordings.
+    trial_dict[f'{i}'] = [{},  # Empty dictionary indicating no sound.
+                         ]
+
+  experiment = ingest.BrainExperiment(trial_dict, '/tmp', '/tmp')
+  experiment.load_all_data('/tmp', '/tmp')
+
+  for i in range(len(bv_data)):
+    experiment.trial_data(f'{i}').add_model_feature('f1', f1_data[i])
+    experiment.trial_data(f'{i}').add_model_feature('f2', f2_data[i])
+
+  print(experiment.summary())
+
+  experiment.z_score_all_data()
+
+  !mkdir -p /tmp/tfdir
+  experiment.write_all_data('/tmp/tfdir')
 """
 
 import collections
@@ -290,19 +321,21 @@ class BrainTrial(object):
 
   def summary_string(self):
     """Construct string to summarize one trial's data."""
-    summary = '%d EEG channels ' % len(self._brain_data)
-    eeg_sample = self._brain_data[list(self._brain_data.keys())[0]]
-    if isinstance(eeg_sample.signal, np.ndarray):
-      summary += 'with %gs of eeg data' % (eeg_sample.signal.shape[0]/
-                                           float(eeg_sample.sr))
-    else:
-      summary += 'No EEG data'
-    if self._sound_data is not None:
-      summary += ', %gs of audio data' % (self._sound_data.shape[0]/
-                                          float(self._sound_fs))
-    for k in self._model_features:
-      summary += ', %s samples of %s data.' % (self._model_features[k].shape,
-                                               k)
+    summary = '%d EEG channels' % len(self._brain_data)
+    if self._brain_data:
+      eeg_sample = self._brain_data[list(self._brain_data.keys())[0]]
+      if isinstance(eeg_sample.signal, np.ndarray):
+        summary += ' with %gs of eeg data' % (eeg_sample.signal.shape[0]/
+                                              float(eeg_sample.sr))
+      else:
+        summary += 'No EEG data'
+      if self._sound_data is not None:
+        summary += ', %gs of audio data' % (self._sound_data.shape[0]/
+                                            float(self._sound_fs))
+      for k in self._model_features:
+        summary += ', %s samples of %s data' % (self._model_features[k].shape,
+                                                k)
+    summary += '.'
     return summary
 
   def load_sound(self, sound_data, sound_fs=None, sound_dir=None):
@@ -782,10 +815,13 @@ class BrainExperiment(object):
     return filename
 
   def __init__(self, trial_dict, sound_dir, eeg_dir, frame_rate=64):
+    if not isinstance(trial_dict, dict):
+      raise TypeError('trial is specified with a dictionary of data not %s' %
+                      trial_dict)
     if not isinstance(sound_dir, str):
-      raise TypeError('trial is specified with a dictionary of data.')
+      raise TypeError(f'The sound_dir must be a string, not {sound_dir}.')
     if not isinstance(eeg_dir, str):
-      raise TypeError('EEG_dir must be a string.')
+      raise TypeError(f'The EEG_dir must be a string, not {eeg_dir}.')
     self._sound_dir = sound_dir
     self._eeg_dir = eeg_dir
     self._frame_rate = frame_rate
@@ -856,7 +892,7 @@ class BrainExperiment(object):
         raise TypeError('trial_name (%s) in trial_dict is not a string.' %
                         trial_name)
       this_trial = BrainTrial(trial_name)
-      sound_data = all_data.pop(0)
+      sound_data = all_data[0]
       if isinstance(sound_data, str):
         if verbose:
           logging.info('load_all_data %s: Reading sound data from %s...',
@@ -866,7 +902,7 @@ class BrainExperiment(object):
         self.add_sound_data(sound_data, this_trial)
       else:
         raise TypeError('Can not process %s for sounds.' % type(sound_data))
-      for eeg_data_item in all_data:
+      for eeg_data_item in all_data[1:]:
         logging.info('load_all_data %s: Reading EEG data from %s...',
                      trial_name, eeg_data_item)
         this_trial.load_brain_data(eeg_dir, eeg_data_item)
