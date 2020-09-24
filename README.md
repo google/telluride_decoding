@@ -57,13 +57,15 @@ pip install telluride-decoding
 
 ## Using this code
 This library is written in Python3 and uses Tensorflow2. The
-decoding code can be run as a standalone program, or as a library, in for
-instance a [Colab](https://colab.research.google.com).
+decoding code can be run as a standalone program, or as a library, or in 
+a [Colab](https://colab.research.google.com), a form of Python
+wrapped in an interactive notebook.
 
-Documentation on the standalone decoding program can be found
-[here](doc/decoding.md). This version is useful in distributed environments,
-where one might want to do a parameter search.  Each run of the program
-tests one set of parameters.
+There is a complete end-to-end codelab that describes how to use the programs
+to perform attention decoding on a public dataset. With a Unix machine and
+access to to GitHub you can verify that the code works and produces the same
+results as we get at Google.  The codelab is here
+[doc/DecodingCodelab.md](doc/DecodingCodelab.md)
 
 One can also use the program as a library in a Colab. Colab allows one to
 interactively ingest data, build models, and test their performance. Here is
@@ -72,6 +74,10 @@ an example:
 * Telluride4: Ingest and test linear regression.
 [colab](https://colab.sandbox.google.com/github/google/telluride_decoding/blob/master/Telluride_Decoding_Toolbox_TF2_Demo.ipynb)
 
+Documentation on the standalone decoding program can be found
+[here](doc/decoding.md). This version is useful in distributed environments,
+where one might want to do a parameter search.  Each run of the program
+tests one set of parameters.
 
 The code uses CPU or GPUs, as available. TPU support is forthcoming.
 

@@ -33,7 +33,7 @@ long_description = long_description.replace(
 
 setuptools.setup(
     name='telluride_decoding',
-    version='2.1.3',   # TF2 and Python 3 (no Py2)
+    version='2.1.4',   # TF2 and Python 3 (no Py2)
     author='Malcolm Slaney',
     author_email='telluride-decoding-maintainers@googlegroups.com',
     description='Telluride Decoding Toolbox',

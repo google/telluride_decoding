@@ -273,7 +273,7 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     self._set_parameters(values)
 
   def _set_parameters(self, values):
-    print('Values:{}'.format(values))
+    logging.info('Scaled_LDA Parameter Values: %s', values)
     values = LdaParamsTuple(*values)
 
     super(ScaledLinearDiscriminantAnalysis, self)._set_parameters(values)

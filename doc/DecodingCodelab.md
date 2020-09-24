@@ -20,11 +20,12 @@ EEG, MEG or ECoG. The scientific basis for this AAD framework is first described
 in this paper by
 [O'Sullivan et al. (2015)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4481604/).
 
-The Telluride AAD pipeline involves the following 3 stages:
+The Telluride AAD pipeline involves the following 4 stages:
 
 1.  Ingestion: preprocess raw data and convert to TFRecord format
 1.  Modelling: model the attended audio signal in the brain (offline only)
-1.  Decoding: use model to decode which audio source is being attended
+1.  Decoding: use model to decode likelihood of attending to a speech sound
+1.  Decision: Use the decoding output to decide the attention direction
 
 This document briefly describes the data flow and organization, and then talks
 about how to build decoding models in TensorFlow. Because the system is modular,
@@ -117,16 +118,18 @@ else
   (cd telluride_decoding; git fetch)
 fi
 
-TDT_BIN=telluride_decoding/telluride_decoding
+TDT_BIN=telluride_decoding/telluride_decoding  # Also set below
 ```
 
-#### Testing the Toolkitn
-There are extensive tests built into this toolkit.  To test all the software 
-you need to install one data file that is too big to host on GitHub, and install
-the bazel build (and test) software.
+#### Testing the Toolkit
 
-Download the Telluride2015-demo.mat file from this URL, and install it as the
-file: telluride_decoding/test_data/telluride4/Telluride2015.mat
+There are extensive tests built into this toolkit. To test all the software you
+need to install one data file that is too big to host on GitHub, and install the
+bazel build (and test) software.
+
+Download the Telluride2015-demo.mat file from
+[this URL](https://drive.google.com/uc?id=0ByZjGXodIlspWmpBcUhvenVQa1k), and
+install it as the file: telluride_decoding/test_data/telluride4/Telluride2015.mat
 
 Then you can install bazel and run all the tests using these commands:
 
@@ -249,7 +252,7 @@ restart/relogin to your shell.)
 
 ```shell
 # Define the type of experiment
-tfrecord_path='tfrecords/jens_memory'  # Always tfrecords now
+tfrecord_path='tfrecords/jens_memory'  # Always tfrecords now, relative to cwd
 subj='subject_07'                      # A particularly good subject
 method='cca'                           # cca or linear
 exp_type='codelab'                     # Subdirectory for results.  OK to change
@@ -261,6 +264,9 @@ on the parameters above.  Note: if you change the parameters above, you need to
 rerun this block.
 
 ```shell
+# Where to find all the source code (and binaries)
+TDT_BIN=telluride_decoding/telluride_decoding  # Set by git clone above.
+
 # Where to find the raw data.
 tf_data_dir="${tfrecord_path}/${subj}"
 
@@ -705,23 +711,128 @@ Method name is: tensorflow/serving/predict
 ```
 
 ### Stage 4: Decision/Inference {#Stage4}
-Based on the results of the decoding stage, the deciding stage picks
+Based on the results of the *decoding* stage, the *deciding* stage picks
 the more likely source of the attended audio.
-This is done in one of two ways:
+This is done with the infer program in one of three ways:
 
-*  Maximum of correlation over windows
-*  [State space decoder] (https://www.frontiersin.org/articles/10.3389/fnins.2018.00262/full)
+*  Maximum of correlation over each correlation window (WTA)
+*  [State space decoder] (https://www.frontiersin.org/articles/10.3389/fnins.2018.00262/full) (SSD)
+*  [Stepped decoder] (https://ieeexplore.ieee.org/document/8895794) -
+Geirnaert calls this an Adpative Gain Control System.
 
-The program below depends on data that has been recorded with the subject 
+The final infer program depends on data that has been recorded with one subject 
 listening to two different speakers.  We do not have that with Jens' data
-so the following program will not run.
+so we can use the following Python program to merge two recordings into one,
+with the subject arbitrarily switching attention half way through.
+
+```shell
+python3 <<!
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+tf.compat.v1.enable_v2_behavior()
+
+from absl import app
+from absl import flags
+
+from telluride_decoding import brain_data
+from telluride_decoding import ingest
+
+flags.DEFINE_string('base_dir', 'tfrecords/jens_memory/subject_07', 
+                    'Where to find the base set of TFRecords.')
+flags.DEFINE_string('file1', 'trial_01.tfrecords', 'First data file to read.')
+flags.DEFINE_string('file2', 'trial_02.tfrecords', 'Second data file to read.')
+flags.DEFINE_string('output_file', 'tfrecords/jens_memory/test', 
+                    'Where to store the combined test file.')
+
+FLAGS = flags.FLAGS
+
+def read_all_tfrecords(filename):
+  """Reads all the data in a TFRecord file into a dictionary of nparrays.
+  """
+  record_count, _ = brain_data.count_tfrecords(filename)
+  feature_dict = brain_data.discover_feature_shapes(filename)
+  all_data = {}
+  for k, description in feature_dict.items():
+    all_data[k] = np.zeros((record_count, description.shape[0]), np.float32)
+
+  dataset = tf.data.TFRecordDataset(filename)
+
+  for i, a_record in enumerate(dataset):
+    an_example = tf.train.Example.FromString(a_record.numpy())
+    for k in an_example.features.feature.keys():
+      feature_list = an_example.features.feature[k]
+      all_data[k][i, :] = feature_list.float_list.value  # Assumes all floats
+
+  return all_data
+
+def main(argv):
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments: %s.', argv)
+
+  data1 = read_all_tfrecords(os.path.join(FLAGS.base_dir, 
+                                          FLAGS.file1))
+  data2 = read_all_tfrecords(os.path.join(FLAGS.base_dir, 
+                                          FLAGS.file2))
+
+  num_frames = min(data1['eeg'].shape[0], data2['eeg'].shape[0])
+   
+  # Create switched EEG signal where first half comes from file1 and second
+  # half comes from file2.
+  switched_eeg = np.concatenate((data1['eeg'][:num_frames//2, :],
+                                 data2['eeg'][num_frames//2:num_frames, :]),
+                                axis=0),
+  # Likewise create ground truth showing attention signal flips half way through
+  switched_attention = np.concatenate((np.zeros((num_frames//2, 1),
+                                                dtype=np.float32),
+                                       np.ones((num_frames//2, 1), 
+                                               dtype=np.float32)),
+                                      axis=0)
+  new_data = {'intensity': data1['intensity'][:num_frames, :],
+              'intensity2': data2['intensity'][:num_frames, :],
+              'eeg': switched_eeg,
+              'attended_speaker': switched_attention
+             }
+
+  # Create the experiment description so we can write out the data.
+  trial_dict = {'combined_test': [{}, ]}
+
+  experiment = ingest.BrainExperiment(trial_dict, '/tmp', '/tmp')
+  experiment.load_all_data('/tmp', '/tmp')
+
+  for k in new_data.keys():
+    experiment.trial_data('combined_test').add_model_feature(k, new_data[k])
+
+  print(experiment.summary())
+
+  experiment.write_all_data(FLAGS.output_file)
+
+  new_count, _ = brain_data.count_tfrecords('tfrecords/jens_memory/combined_test.tfrecords')
+  new_features = brain_data.discover_feature_shapes('tfrecords/jens_memory/combined_test.tfrecords')
+  print(f'Summarizing {FLAGS.output_file}: Found {new_count} records with',
+        f'shape {new_features}') 
+                            
+if __name__ == '__main__':
+  app.run(main)
+!
+```
+
+The following program then analyzes the results. Note, this is not a good 
+test for attention decoding because the data is very artificial.  
+1) The EEG data is switched immediately between that due to one speaker and
+the other.  This introduces a large discontinity which is an obvious artifact.
+2) The subject is only hearing one audio at a time, not two as in the normal
+attention switching paradigm.  Still this is a good way to show how
+the software is used to decode attention.
 
 ```shell
 python3 ${TDT_BIN}/infer.py \
   --plot_dir=$sum_dir \
   --model_dir=${sum_dir}/model \
-  --tf_dir="${tf_data_dir}" \
-  --infer_test_file="trial_01.tfrecords" \
+  --tf_dir="tfrecords/jens_memory/test" \
+  --infer_test_file="combined_test.tfrecords" \
+  --audio_label 'intensity' \
   --comparison_test
 
 echo "Window_test summary plot is in:" "${sum_dir}/test_results-comparison.png"
@@ -731,11 +842,15 @@ This produces a summary plot showing the relative performance of the two
 (current) means of deciding the attended speaker: correlation winner and
 state-space decoding.
 
+![AAD Summary](test_results-comparison.png "AAD result plot")
+
 
 ## Software Overview
-This figure gives a rough roadmap for the decoding software.  The boxes
-that are colored in light blue are main programs, and thus the starting point
+This figure gives a rough roadmap for the decoding software.  The light-blue
+ellipses are main programs, and thus the starting point
 for an experiment.
+The gray ellipses are internal library routines (which are
+accessible from Python or a Colab.)
 
 ```dot
 digraph d_front_back {

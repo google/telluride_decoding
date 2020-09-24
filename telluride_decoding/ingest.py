@@ -49,7 +49,7 @@ parameters are just dummy parameters since all the data is in-memory
 numpy arrays.
 
   trial_dict = {}
-  for i in range(len(bv_data)):
+  for i in range(len(f1_data)):
     # Each trial is described in a list of a sound and zero+ EEG recordings.
     trial_dict[f'{i}'] = [{},  # Empty dictionary indicating no sound.
                          ]
@@ -57,7 +57,7 @@ numpy arrays.
   experiment = ingest.BrainExperiment(trial_dict, '/tmp', '/tmp')
   experiment.load_all_data('/tmp', '/tmp')
 
-  for i in range(len(bv_data)):
+  for i in range(len(f1_data)):
     experiment.trial_data(f'{i}').add_model_feature('f1', f1_data[i])
     experiment.trial_data(f'{i}').add_model_feature('f2', f2_data[i])
 
