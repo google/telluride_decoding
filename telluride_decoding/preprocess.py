@@ -631,7 +631,7 @@ class AudioFeatures(object):
 
     Given audio data at a sample rate of fs_in, compute the moving average over
     a specified window to resample to a rate of fs_out.  If window > 1, the
-    coutput frames are computed using overlapping samples, resulting in greater
+    output frames are computed using overlapping samples, resulting in greater
     smoothing.  This can help reduce the effects of aliasing.
 
     This routine was adapted from the algorithm CreateLoudnessFeature from the
@@ -643,6 +643,18 @@ class AudioFeatures(object):
     Returns:
       data_out: The resampled data as a numpy array.
     """
+
+    data = np.asarray(data)
+    if data.ndim <= 1:
+      logging.log_first_n(logging.INFO,
+                          'Converting %s sound from shape %s to 2-D' %
+                          (self._name, data.shape), 5)
+      data = np.reshape(data, (-1, 1))
+    if data.shape[1] > data.shape[0]:
+      logging.log_first_n(logging.INFO,
+                          'Transposing %s sound from shape %s' %
+                          (self._name, data.shape), 5)
+      data = np.transpose(data)
 
     # Get half window size in seconds.
     half_window_size = 0.5 * self._window / self._fs_out
@@ -690,8 +702,8 @@ class AudioFeatures(object):
     Returns:
       The intensity feature as a numpy array.
     """
-    # Compute RMS intensity.
-    data = self.audio_resample(data**2)**0.5
+    # Compute RMS intensity (as float to prevent overflow).
+    data = self.audio_resample(data.astype(np.float32)**2)**0.5
 
     # Apply dynamic range compression.
     return data**self._exponent

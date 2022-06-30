@@ -530,7 +530,6 @@ class TFRecordsCCA(RegressionCCA):
     return model_type
 
 
-
 def select_regression_object(test_name, my_flags):
   """Selects the right regression object given the desired test name.
 

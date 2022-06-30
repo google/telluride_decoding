@@ -14,7 +14,7 @@ import os
 import re
 import sys
 import tempfile
-import typing
+from typing import List, Optional, Text
 import urllib
 
 from absl import app
@@ -31,18 +31,16 @@ from telluride_decoding import brain_data
 from telluride_decoding import ingest
 from telluride_decoding import preprocess
 
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
-
+import tensorflow as tf
 
 regression_data_print = sys.stdout  # Feel free to redirect prints elsewhere.
 
 
 @attr.s
 class DataLocation(object):
-  internet = attr.ib(type=typing.Text)   # Original source of data on Internet
-  cache_dir = attr.ib(type=typing.Text)   # Loc. of local copy of original data
-  tf_dir = attr.ib(type=typing.Text)  # Location of local ingested TFRecord copy
+  internet = attr.ib(type=Text)   # Original source of data on Internet
+  cache_dir = attr.ib(type=Text)   # Loc. of local copy of original data
+  tf_dir = attr.ib(type=Text)  # Location of local ingested TFRecord copy
   desired_frame_rate = attr.ib(type=float)  # Frame rate for the data
   data_type = attr.ib()    # Which Regression class provides default params
 
@@ -249,14 +247,15 @@ def make_if_not_exists(directory):
 class RegressionData(object):
   """Base for data download & to ingest data for regression experiments."""
 
-  def download_data(self, url, cache_dir, debug=False):
+  def download_data(self, url: str, cache_dir: str,
+                    debug: bool = False) -> bool:
     # Be sure to specialize this routine and call this superclass last.
     del debug
     readme_file = os.path.join(cache_dir, 'README.txt')
     with tf.io.gfile.GFile(readme_file, 'w') as fp:
       fp.write('These files were downloaded\nFrom %s\nTo %s\nUsing: %s\n' %
                (url, cache_dir, sys.argv))
-
+    return True
 
 
 class RegressionDataTelluride4(RegressionData):
@@ -265,7 +264,8 @@ class RegressionDataTelluride4(RegressionData):
   def is_data_local(self, cache_dir):
     return tf.io.gfile.exists(os.path.join(cache_dir, 'Telluride2015.mat'))
 
-  def download_data(self, url, cache_dir, debug=False):
+  def download_data(self, url: str, cache_dir: str,
+                    debug: bool = False) -> bool:
     """Download the Telluride4 data from the published location.
 
     Need to copy to local /tmp file because gdrive code doesn't support writing
@@ -278,6 +278,9 @@ class RegressionDataTelluride4(RegressionData):
       url: Location of the original data from the Telluride4 experiment
       cache_dir: Where to store the local copy.
       debug: Get debugging information from downloading process.
+    Returns:
+      Boolean indicating whether the data was actually downloaded, or just a
+      message was printed telling the user how to do it.
     """
     tmp_file = os.path.join(_tmp_dir, 'Telluride2015.mat')
     download_from_gdrive(
@@ -287,10 +290,11 @@ class RegressionDataTelluride4(RegressionData):
     cache_file = os.path.join(cache_dir, os.path.split(tmp_file)[1])
     with tf.io.gfile.GFile(tmp_file, 'rb') as old_fp:
       logging.info('Copying %s to %s...', tmp_file, cache_file)
+      tf.io.gfile.makedirs(cache_dir)
       with tf.io.gfile.GFile(cache_file, 'wb') as new_fp:
         new_fp.write(old_fp.read())
 
-    super(RegressionDataTelluride4, self).download_data(url, cache_dir)
+    return super(RegressionDataTelluride4, self).download_data(url, cache_dir)
 
   def is_data_ingested(self, tf_dir, num_files=32):
     file_count = len(tf.io.gfile.glob(os.path.join(tf_dir, '*.tfrecords')))
@@ -326,9 +330,12 @@ class RegressionDataTelluride4(RegressionData):
       sound_dict = {
           'intensity':
               audio_signals[i % 4],
-          'ones':
+          'ones':  # Backward compatible, keep a vector of 1 for attended spkr.
               np.ones(audio_signals[i % 4].shape,
-                      dtype=audio_signals[i % 4].dtype)
+                      dtype=audio_signals[i % 4].dtype),
+          'attended_speaker':
+              np.zeros(audio_signals[i % 4].shape,
+                       dtype=audio_signals[i % 4].dtype),
       }
       eeg_dict = {'eeg_data': eeg_signals[i]}
       trial_dict['trial_{:02d}'.format(i + 1)] = [
@@ -367,7 +374,7 @@ class RegressionDataJensMemory(RegressionData):
       return len(all_files) == num_subjects
     return False
 
-  def download_data(self, url, cache_dir):
+  def download_data(self, url: str, cache_dir: str, debug: bool = False):
     """Downloads the Jens data by COCOHA from the published location.
 
     Normal location is:
@@ -376,6 +383,9 @@ class RegressionDataJensMemory(RegressionData):
     Args:
       url: Location of the original data from Jens' experiment
       cache_dir: Where to store the local copy.
+      debug: Unused
+    Returns:
+      Boolean indicating whether the data was actually downloaded
     """
     tmp_jens_dir = os.path.join(_tmp_dir, 'jens_raw_data')
     tf.io.gfile.makedirs(tmp_jens_dir)
@@ -395,7 +405,7 @@ class RegressionDataJensMemory(RegressionData):
         with tf.io.gfile.GFile(new_file, 'wb') as new_fp:
           new_fp.write(old_fp.read())
 
-    super(RegressionDataJensMemory, self).download_data(url, cache_dir)
+    return super(RegressionDataJensMemory, self).download_data(url, cache_dir)
 
   def is_data_ingested(self, tf_dir, num_subjects=22, num_trials=40):
     """Checks to make sure all the data has been ingested into TFRecords."""
@@ -481,7 +491,9 @@ class RegressionDataJensImpaired(RegressionData):
       return len(all_files_sub) == num_subjects
     return False
 
-  def download_data(self, url, cache_dir):
+  def download_data(self, url: str,
+                    cache_dir: str,
+                    debug: bool = False) -> bool:
     """Dummy function.  Too big to download automatically.
 
     This is too bulky to fetch each time.  Just tell user how to download it
@@ -491,10 +503,17 @@ class RegressionDataJensImpaired(RegressionData):
     Args:
       url: Location of the original data from Jens' experiment
       cache_dir: Where to store the local copy.
+      debug: unused
+    Returns:
+      Whether data could actually be automatically download, in this case no.
     """
     super(RegressionDataJensImpaired, self).download_data(url, _tmp_dir)
-    print('To download manually, use command: wget -c {} {}'.format(
-        url, cache_dir))
+    print('To download manually, use the commands: wget -c {} -O {}/{}'.format(
+        url, cache_dir, 'ds-eeg-snhl.tar'))
+    print(f' cd {cache_dir}')
+    print(' tar xvf ds-eeg-snhl.tar')
+    print(' mv ds-eeg-snhl/* .; rmdir ds-eeg-snhl')
+    return False
 
   def is_data_ingested(self, tf_dir, num_subjects=44, num_trials=48):
     """Checks to make sure all the data has been ingested into TFRecords."""
@@ -526,6 +545,13 @@ class RegressionDataJensImpaired(RegressionData):
           .format(len(all_dirs_sub)))
 
     for sid, subject_dir in enumerate(all_dirs_sub):
+      tf_dir_subject = os.path.join(tf_dir,
+                                    'subject_{:02d}'.format(sid + 1))
+      summary_file = os.path.join(tf_dir_subject, 'README.txt')
+      if tf.io.gfile.exists(summary_file):
+        print(f'Skipping subject {sid} because {summary_file} exists.')
+        continue
+      trial_dict = {}
       # There is a single EEG and events file per subject
       eeg_file = os.path.join(
           cache_dir, subject_dir,
@@ -541,7 +567,8 @@ class RegressionDataJensImpaired(RegressionData):
       # - a tabular format. Each column in the table, accessed using a string
       # key holds an array of objects of a fixed type. Keys are the column
       # headers in the tsv file.
-      events_df = pd.read_csv(events_file, sep='\t')
+      with ingest.LocalCopy(events_file) as filename:
+        events_df = pd.read_csv(filename, sep='\t')
       # Subject 24 has events described in 2 parts hence the if case below
       # which pulls the remaining data from the second file.
       if sid == 23:
@@ -549,7 +576,8 @@ class RegressionDataJensImpaired(RegressionData):
             cache_dir, subject_dir,
             'eeg/{}_task-selectiveattention_run-2_events.tsv'.format(
                 subject_dir))
-        events_df_part = pd.read_csv(events_file_part, sep='\t')
+        with ingest.LocalCopy(events_file_part) as filename:
+          events_df_part = pd.read_csv(filename, sep='\t')
         events_df = pd.concat([events_df, events_df_part])
 
       # Attended audio is called target and unattended audio called masker.
@@ -574,7 +602,9 @@ class RegressionDataJensImpaired(RegressionData):
 
       # Load EEG file, which is in bdf format.
       print('Reading in {}'.format(eeg_file))
-      f = pyedflib.EdfReader(eeg_file)
+      with ingest.LocalCopy(eeg_file) as filename:
+        print(f'Ingesting EDF from {filename} instead of {eeg_file}')
+        f = pyedflib.EdfReader(filename)
       num_channels = f.signals_in_file
 
       sigbufs = np.zeros((f.getNSamples()[0], num_channels))
@@ -582,9 +612,6 @@ class RegressionDataJensImpaired(RegressionData):
         sigbufs[:, i] = f.readSignal(i)
 
       # Stuff for trials
-      tf_dir_subject = os.path.join(tf_dir,
-                                    'subject_{:02d}'.format(sid + 1))
-      trial_dict = {}
       target_audio_signals = []  # List storing target audios
       masker_audio_signals = []  # List storing masker audios
       chopped_sigbufs = []  # List storing chopped signals based on audio timing
@@ -609,7 +636,7 @@ class RegressionDataJensImpaired(RegressionData):
         # single speaker data.
         masker_start_time = masker_df[masker_df['stim_file'] ==
                                       trial_idx]['sample'].values
-        if masker_start_time:
+        if len(masker_start_time):  # pylint: disable=g-explicit-length-test
           # Masker is offset from target audio by jitter seconds
           # Align accordingly
           masker_audio_file = os.path.join(
@@ -659,7 +686,7 @@ class RegressionDataJensImpaired(RegressionData):
                        ''.join(str(trial.model_features[k].shape)))
       make_if_not_exists(tf_dir_subject)
       exp.write_all_data(tf_dir_subject)
-      all_ingested_files = os.listdir(tf_dir_subject)
+      all_ingested_files = tf.io.gfile.listdir(tf_dir_subject)
       all_ingested_files = [
           os.path.join(tf_dir_subject, f) for f in all_ingested_files
       ]
@@ -667,7 +694,201 @@ class RegressionDataJensImpaired(RegressionData):
                     all_ingested_files)
 
 
-def write_summary(cache_dir, tf_dir, frame_rate, all_ingested_files=None):
+class RegressionDataKULeuven(RegressionData):
+  """Class for downloading & ingesting the KULeuven data.
+
+  As described in this paper:
+  Das, N., Biesmans, W., Bertrand, A., & Francart, T. (2016). The effect of
+  head-related filtering and ear-specific decoding bias on auditory attention
+  detection. Journal of Neural Engineering, 13(5), 056014.
+
+  base_data_dir='/tmp'
+
+  tfrecord_path=$base_data_dir+/tfrecords/jens_memory
+  subj='S1'                      # A particularly good subject
+  method='cca'                   # cca or linear
+  exp_type='codelab'             # Subdirectory for results.  OK to change
+
+  """
+
+  @property
+  def name(self) -> str:
+    return 'KULeuven'
+
+  def is_data_local(self, cache_dir: str, num_subjects: int = 16) -> bool:
+    """Check to see if we already have a local copy of the data.
+
+    Args:
+      cache_dir: Where to find the local data
+      num_subjects: How many subjects to expect in the dataset.
+
+    Returns:
+      Whether the data is already available in a local file system.
+    """
+    if tf.io.gfile.exists(cache_dir):
+      all_files = tf.io.gfile.listdir(cache_dir)
+      all_files_sub = [f for f in all_files
+                       if f.startswith('S') and f.endswith('.mat')]
+
+      if len(all_files_sub) == num_subjects:
+        return True
+      else:
+        print(f'Only found these {len(all_files_sub)}/{num_subjects} '
+              f'subjects in {cache_dir}: {all_files_sub}')
+    return False
+
+  def download_data(self, url: str,
+                    cache_dir: str, debug: bool = False) -> bool:
+    """Dummy function. Data is too big to download automatically.
+
+    This is too hard to preprocess. The original preprocessing is all in Matlab.
+    Just tell user how to download it by hand.  Normal location is
+      https://zenodo.org/record/3997352#.YTkc755KhLQ
+
+    Args:
+      url: Location of the original data from Jens' experiment
+      cache_dir: Where to store the local copy.
+      debug: Unused
+
+    Returns:
+      True if this routine is able to download the data, versus just telling
+      user where to get it.
+    """
+    super().download_data(url, _tmp_dir)
+    del debug
+    url = 'https://zenodo.org/record/3997352#.YTkc755KhLQ'
+    print(f'To download manually, grab data from {url}')
+    print(' and run preprocess_data(dir) where dir is the location of the'
+          'data')
+    print(' Copy the S*.mat files from the preprocessed_data directory to '
+          f'{cache_dir}')
+    return False
+
+  def is_data_ingested(self, tf_dir: str, num_subjects: int = 16,
+                       num_trials: int = 20) -> bool:
+    """Checks to make sure all the data has been ingested into TFRecords."""
+    if tf.io.gfile.exists(tf_dir):
+      num_files = len(tf.io.gfile.glob(os.path.join(tf_dir,
+                                                    'S*', '*.tfrecords')))
+      return num_files >= num_trials * num_subjects
+    return False
+
+  def ingest_data(self, cache_dir: str, tf_dir: str, desired_frame_rate: float):
+    """Read KULeuven data from preprocessed mat files and ingest as TFrecords.
+
+    Data format is described in Section 2.3, near the end of paragraph 1 of:
+    Das, N., Biesmans, W., Bertrand, A., & Francart, T. (2016). The
+    effect of head-related filtering and ear-specific decoding bias on
+    auditory attention detection. Journal of Neural Engineering, 13(5).
+
+    Args:
+      cache_dir: Local copy of the original archive file from the Internet
+      tf_dir: Folder where tfrecord files are written out
+      desired_frame_rate: Desired frame rate after ingestion.
+    """
+
+    def calculate_track_intensity(audio_file_name: str) -> np.ndarray:
+      """Process one audio track and create the intensity feature.
+
+      Written as a function since we want to use the same trial->sound mechanism
+      twice.
+
+      Args:
+        audio_file_name: Where to read the data
+
+      Returns:
+        Tuple with the audio intensity data and the sample rate.
+      """
+      trial_data.load_sound(audio_file_name,
+                            sound_dir=os.path.join(cache_dir, 'stimuli'))
+      audio_feature = preprocess.AudioFeatures(audio_file_name,
+                                               trial_data.sound_fs,
+                                               desired_frame_rate)
+      audio_intensity = audio_feature.compute_intensity(
+          trial_data.sound_data)
+      return audio_intensity
+
+    eeg_dir = '.'
+    sound_dir = '.'
+
+    print(f'Trying to create {tf_dir}')
+    make_if_not_exists(tf_dir)
+
+    all_ingested_files = []
+    for subject_number in range(16):  # Hardwired in the dataset.
+      mat_file = os.path.join(cache_dir, f'S{subject_number+1}.mat')
+      tf_sub_dir = os.path.join(tf_dir, f'S{subject_number+1}')
+      tf.io.gfile.makedirs(tf_sub_dir)
+      mat_data = loadmat(mat_file)
+      trial_count = mat_data['preproc_trials'].shape[0]
+      trial_dict = {}
+      for trial_number in range(trial_count):
+        subject_trial_name = f'S{subject_number+1}_T{trial_number}'
+        tfrecord_file = os.path.join(tf_sub_dir,
+                                     subject_trial_name + '.tfrecords')
+        if tf.io.gfile.exists(tfrecord_file):
+          print(f'Skipping {subject_trial_name} because '
+                f'{tfrecord_file} exists.')
+          continue
+        mat_trial_data = mat_data['preproc_trials'][trial_number]
+        if mat_trial_data.attended_ear == 'L':
+          attended_track = 0
+          unattended_track = 1
+        elif mat_trial_data.attended_ear == 'R':
+          attended_track = 1
+          unattended_track = 0
+        else:
+          raise ValueError('Unknown attended ear (%s)' %
+                           mat_trial_data.attended_ear)
+        eeg_signal = mat_trial_data.RawData.EegData
+        eeg_fs = mat_trial_data.FileHeader.SampleRate
+        attended_file_name = mat_trial_data.stimuli[attended_track]
+        unattended_file_name = mat_trial_data.stimuli[unattended_track]
+        print(f'Subject {subject_number+1}, Trial #{trial_number}: '
+              f'Attended ear is {mat_trial_data.attended_ear}, '
+              f'eeg_data has size {eeg_signal.shape} '
+              f'audio_track_name is {attended_file_name} ')
+
+        trial_data = ingest.BrainTrial(subject_trial_name)
+        p_eeg = preprocess.Preprocessor('eeg', eeg_fs, desired_frame_rate)
+        ds_eeg_signal = p_eeg.resample(eeg_signal)
+
+        ds_audio_intensity = calculate_track_intensity(attended_file_name)
+        ds_audio_intensity2 = calculate_track_intensity(unattended_file_name)
+        eeg_data = ingest.MemoryBrainDataFile({'eeg_data': ds_eeg_signal},
+                                              desired_frame_rate)
+        trial_dict[subject_trial_name] = [{'intensity': ds_audio_intensity,
+                                           'intensity2': ds_audio_intensity2,
+                                           'attended_speaker':
+                                               0*ds_audio_intensity,
+                                          },
+                                          eeg_data]
+        print(f'Trial_dict{subject_trial_name} is:')
+        shape = trial_dict[subject_trial_name][0]['intensity'].shape
+        print(f'   intensity: {shape}')
+        shape = trial_dict[subject_trial_name][0]['intensity2'].shape
+        print(f'   intensity2: {shape}')
+        shape = trial_dict[subject_trial_name][0]['attended_speaker'].shape
+        print(f'   attended: {shape}')
+        print(f'   output: {ds_eeg_signal.shape} at {desired_frame_rate}Hz.')
+
+      exp = ingest.BrainExperiment(
+          trial_dict, sound_dir, eeg_dir, frame_rate=desired_frame_rate)
+      exp.load_all_data(sound_dir, eeg_dir)
+      exp.z_score_all_data()
+      for trial in exp.iterate_trials():
+        trial.assemble_brain_data('eeg_data')
+        for k in trial.model_features:
+          logging.info('Trial # %s, audio shapes %s', str(k),
+                       ''.join(str(trial.model_features[k].shape)))
+      make_if_not_exists(tf_sub_dir)
+      all_ingested_files.extend(exp.write_all_data(tf_sub_dir))
+
+    write_summary(cache_dir, tf_dir, desired_frame_rate, all_ingested_files)
+
+
+def write_summary(cache_dir: str, tf_dir: str, frame_rate: float,
+                  all_ingested_files: Optional[List[str]] = None):
   """Write a summary of the experiment into the directory's readme file.
 
   The README.txt file contains the source directory and the frame rate, as
@@ -703,29 +924,40 @@ def write_summary(cache_dir, tf_dir, frame_rate, all_ingested_files=None):
 
 locations = {}
 
+base_data_dir = '/tmp'
+
 locations['telluride4'] = DataLocation(
     'https://drive.google.com/uc?id=0ByZjGXodIlspWmpBcUhvenVQa1k',
-    'test_data/local_cache/telluride4',
-    'test_data/tf_dir/telluride4_64Hz',
+    os.path.join(base_data_dir, 'local_cache/telluride4'),
+    os.path.join(base_data_dir, 'tf_dir/telluride4_64Hz'),
     64,   # Original is 128Hz frame rate
     RegressionDataTelluride4
     )
 
 locations['jens_memory'] = DataLocation(
     'https://zenodo.org/record/1158410/files/DATA.zip',  # 128Hz Data, 64 chan
-    'test_data/local_cache/jens_memory',
-    'test_data/tf_dir/jens_memory_64Hz',
+    os.path.join(base_data_dir, 'local_cache/jens_memory'),
+    os.path.join(base_data_dir, 'tf_dir/jens_memory_64Hz'),
     64,    # Original data starts at 128Hz, download to 64 for these Exps.
     RegressionDataJensMemory
     )
 
 locations['jens_impaired'] = DataLocation(
     'https://zenodo.org/record/3618205/files/ds-eeg-snhl.tar?download=1',
-    'test_data/DTU_hearing_loss',
-    'test_data/tf_dir/jens_impaired_64Hz/',
+    os.path.join(base_data_dir, 'local_cache/jens_impaired'),
+    os.path.join(base_data_dir, 'tf_dir/jens_impaired_64Hz'),
     64,    # Original is 512 Hz
     RegressionDataJensImpaired
     )
+
+locations['kuleuven'] = DataLocation(
+    'https://zenodo.org/record/3997352#.YTkc755KhLQ',
+    os.path.join(base_data_dir, 'local_cache/kuleuven'),
+    os.path.join(base_data_dir, 'tf_dir/kuleuven'),
+    32,
+    RegressionDataKULeuven
+    )
+
 
 flags.DEFINE_enum('type', 'telluride4',
                   list(locations.keys()),
@@ -736,6 +968,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments: %s.' % argv)
 
+  logging.set_verbosity(logging.INFO)
   database = locations[FLAGS.type]
   data_object = database.data_type()
 
@@ -750,10 +983,12 @@ def main(argv):
         'Downloading data from Internet to cache_dir:',
         cache_dir,
         file=regression_data_print)
-    data_object.download_data(url, cache_dir)
+    if not data_object.download_data(url, cache_dir):
+      print('No data available locally, aborting.')
+      return
   else:
     print(
-        'No need to download data since it is here:',
+        'No need to download data since it is all here:',
         cache_dir,
         file=regression_data_print)
 
@@ -763,11 +998,10 @@ def main(argv):
     data_object.ingest_data(cache_dir, tf_dir, desired_frame_rate)
   else:
     print(
-        'No need to ingest data since it is here:',
+        'No need to ingest data since it is all here:',
         tf_dir,
         file=regression_data_print)
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   app.run(main)

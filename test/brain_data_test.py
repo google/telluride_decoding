@@ -21,12 +21,14 @@ import os
 from absl import flags
 from absl.testing import absltest
 from absl.testing import flagsaver
+from absl.testing import parameterized
 
 import numpy as np
 from telluride_decoding.brain_data import BrainData
 from telluride_decoding.brain_data import count_tfrecords
 from telluride_decoding.brain_data import create_brain_dataset
 from telluride_decoding.brain_data import discover_feature_shapes
+from telluride_decoding.brain_data import mismatch_batch_randomization
 from telluride_decoding.brain_data import TestBrainData
 from telluride_decoding.brain_data import TFExampleData
 
@@ -54,6 +56,32 @@ flags.DEFINE_string('input_field', 'mel_spectrogram',
                     'Input field to use for predictions.')
 flags.DEFINE_string('output_field', 'envelope',
                     'Output field to predict.')
+
+
+class MismatchTest(parameterized.TestCase):
+
+  @parameterized.named_parameters(
+      ('even', 100000, 100, 150),
+      ('odd',  100001, 100, 150),  # pylint: disable=bad-whitespace
+      )
+  def test_mismatch(self, n, reps, expected):
+    x = tf.constant(np.reshape(np.arange(n), (-1, 1)))
+    y = 10 + tf.constant(np.reshape(np.arange(n), (-1, 1)))
+    not_different = 0
+    for _ in range(reps):
+      new_x, new_x2, new_y, new_a = mismatch_batch_randomization(x, y, x, x)
+      np.testing.assert_array_equal(x, new_x)
+      np.testing.assert_array_equal(new_x.shape[0], new_x2.shape[0])
+      np.testing.assert_array_equal(new_x.shape[0], new_y.shape[0])
+      np.testing.assert_array_equal(new_x.shape[0], new_a.shape[0])
+      mid = (n+1)//2  # The first mid points are match, the rest are mismatch.
+      np.testing.assert_array_equal(new_y[:mid, :], 0)
+      np.testing.assert_array_equal(new_x2[:mid, :], y[0::2, :])  # Even #'ed
+
+      np.testing.assert_array_equal(new_y[mid:, :], 1)
+      # Hopefully not many matches in random part.
+      not_different += np.sum(new_x2[mid:, :] == y[1::2, :])
+      self.assertLess(not_different, expected)
 
 
 class BrainDataTest(absltest.TestCase):

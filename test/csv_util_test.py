@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-# Lint as: python2 python3
 
 import collections
 import os

@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 """Test for telluride_decoding.infer."""
 
 import os
+import tempfile
 
 from absl import flags
 from absl import logging
@@ -30,8 +31,7 @@ from telluride_decoding import brain_model
 from telluride_decoding import decoding
 from telluride_decoding import infer
 
-import tensorflow.compat.v2 as tf
-# End user should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf
 
 
 class InferTest(absltest.TestCase):
@@ -80,19 +80,18 @@ class InferTest(absltest.TestCase):
                                  params, audio_label)
     self.assertIsInstance(bd, brain_data.BrainData)
 
-  def create_model(self):
-    train_files = 'subj01'
-    test_files = 'subj02'
-    tf_dir = self._test_data_dir
+  def create_model(self, tf_dir: str, train_files: str, test_files: str):
+    """Create a model to go with our test data."""
     params = {'input_field': 'meg',
-              'output_field': 'envelope',
+              'output_field': 'intensity',
               'pre_context': 0,
               'post_context': 0,
               'input2_pre_context': 0,
               'input2_post_context': 0,
               'attended_field': None,
              }
-    audio_label = 'envelope'
+    audio_label = 'intensity'
+    print(f'Train_dir: {tf_dir}, train_files: {train_files}, params: {params}')
     bd = infer.create_brain_data(tf_dir, train_files, test_files,
                                  params, audio_label)
     bd_train = bd.create_dataset('train')
@@ -118,18 +117,58 @@ class InferTest(absltest.TestCase):
                                                'decoder_model.json'))
     return saved_model_dir, train_files, test_files
 
+  def create_fake_data(self):
+    """Create some fake data for testing.
+
+    1 second attending to speaker 2.  The rest attending to speaker 1.
+
+    Returns:
+      Tuple: Directory containing tf_records, and a tf_record file name.
+    """
+    frame_rate = 100
+    num_seconds = 100
+    num_frames = frame_rate * num_seconds
+
+    intensity1 = np.random.randn(num_frames, 1)
+    intensity2 = np.random.randn(num_frames, 1)
+
+    meg = np.random.randn(num_frames, 148)
+    meg[:, 0:1] = intensity1[:, :] * 2
+    meg[0:frame_rate, :] = intensity2[0:frame_rate, :] * 3
+
+    tmp_dir = tempfile.gettempdir()
+    tmp_file = 'fake.tfrecords'
+    tfrecord_file = os.path.join(tmp_dir, tmp_file)
+    with tf.io.TFRecordWriter(tfrecord_file) as writer:
+      for i in range(meg.shape[0]):
+        feature = {}
+        feature['intensity'] = tf.train.Feature(
+            float_list=tf.train.FloatList(value=intensity1[i]))
+        feature['intensity2'] = tf.train.Feature(
+            float_list=tf.train.FloatList(value=intensity2[i]))
+        feature['meg'] = tf.train.Feature(
+            float_list=tf.train.FloatList(value=meg[i]))
+
+        features = tf.train.Features(feature=feature)
+        example = tf.train.Example(features=features)
+        serialized = example.SerializeToString()
+        writer.write(serialized)
+    return tmp_dir, tmp_file
+
   @mock.patch.object(plt, 'savefig')
   def test_run_reduction_test(self, mock_savefig):
-    saved_model_dir, train_files, test_files = self.create_model()
+    plot_dir = os.path.join(os.environ.get('TMPDIR') or '/tmp', 'plots')
+
+    tf_dir, tmp_file = self.create_fake_data()
+    saved_model_dir, _, _ = self.create_model(tf_dir, tmp_file, tmp_file)
 
     reduction = 'first'
     decoder_type = 'wta'
-    plot_dir = os.path.join(os.environ.get('TMPDIR') or '/tmp', 'plots')
     window_results = infer.run_reduction_test(
-        saved_model_dir, self._test_data_dir, train_files, test_files,
-        reduction, decoder_type, 'envelope', 'envelope', plot_dir=plot_dir)
+        saved_model_dir, tf_dir, [tmp_file,], [tmp_file,],
+        reduction, decoder_type, 'intensity', 'intensity2', plot_dir=plot_dir)
     print('Reduction test results:', window_results)
-    self.assertLess(window_results[10], 0.95)
+    self.assertLess(window_results[10], 0.995)
     self.assertGreater(window_results[100], 0.95)
     self.assertGreater(window_results[200], 0.95)
     self.assertGreater(window_results[400], 0.95)
@@ -142,19 +181,21 @@ class InferTest(absltest.TestCase):
 
   @mock.patch.object(plt, 'savefig')
   def test_run_comparison(self, mock_savefig):
-    model_dir, train_files, test_files = self.create_model()
+    tf_dir, tmp_file = self.create_fake_data()
+    model_dir, _, _ = self.create_model(tf_dir, tmp_file, tmp_file)
 
     plot_dir = os.path.join(os.environ.get('TMPDIR') or '/tmp', 'plots')
-    all_results = infer.run_comparison_test(model_dir, self._test_data_dir,
-                                            train_files, test_files,
-                                            'envelope', 'envelope',
+    print(f'Running comparison test with tf_dir={tf_dir}')
+    all_results = infer.run_comparison_test(model_dir,
+                                            tf_dir, tmp_file, tmp_file,
+                                            'intensity', 'intensity2',
                                             plot_dir, reduction_list=['lda',])
     print('all_results are:', all_results)
     for reduction in ['lda',]:
       # Not doing SSD here as there is not enough data to train the model.
       for decoder in ['wta', 'stepped',]:
         window_results = all_results[reduction, decoder]
-        self.assertLess(window_results[10], 0.95)
+        self.assertLess(window_results[10], 0.99)
         self.assertGreater(window_results[100], 0.95)
         self.assertGreater(window_results[200], 0.95)
         self.assertGreater(window_results[400], 0.95)
@@ -181,10 +222,9 @@ class InferTest(absltest.TestCase):
                                 'Unknown reduction technique'):
       infer.load_model('/foo/cca', 'none')
 
-    with self.assertRaisesRegex(IOError,
-                                'SavedModel file does not exist'):
+    with self.assertRaisesRegex(
+        IOError, 'SavedModel file does not exist|No file or directory found'):
       infer.load_model('/foo/cca', 'lda')
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

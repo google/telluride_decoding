@@ -4,7 +4,7 @@
 
 <!--*
 # Document freshness: For more information, see go/fresh-source.
-freshness: { owner: 'malcolmslaney' reviewed: '2020-09-16' }
+freshness: { owner: 'malcolmslaney' reviewed: '2021-03-18' }
 *-->
 
 ## Introduction
@@ -225,6 +225,16 @@ All ingested files:
         tfrecords/jens_memory/subject_01/trial_07.tfrecords: 3342 records (52.21875 seconds) 
 ```
 
+These datasets are currently included:
+
+|  Name | Paper  | Data  | Description  |
+|---|---|---|---|
+|  telluride4 | [Github](https://github.com/neuromorphs-2017-decoding/telluride-decoding-toolbox)  | [GDrive](https://drive.google.com/uc?id=0ByZjGXodIlspWmpBcUhvenVQa1k)  | 4 simultaneous listeners, AV speech with a single speaker, 32 trials, 2 minutes each. |
+| jens_memory  | [Hjortkjær, J, Märcher-Rørsted, J, Fuglsang, SA, Dau, T (2018)](https://doi.org/10.1111/ejn.13855) | [Zenodo](https://zenodo.org/record/1199011#.YS7fQtNKhLQ)  | 22 listeners, 2 speakers, 50 trials, each one minute long  |
+| jens_impaired  | [Fuglsang, S A, Märcher-Rørsted, J, Dau, T, Hjortkjær, J (2020)] (https://www.jneurosci.org/content/40/12/2562)  | [Zenodo](https://zenodo.org/record/3618205/)  | 22 hearing impaired and 22 normal listeners, single and two speaker, 48 trials, about 400 seconds each  |
+| KULeuven | [N. Das, T. Francart, and A. Bertrand (2020)](https://zenodo.org/record/3997352) | [Zenodo](https://zenodo.org/record/3997352)  | 16 normal listeners, listened to two simultaneous stories in Dutch  |
+| To come...  |   |   |   |
+|   | [ S. A. Fuglsang, D. D. E. Wong, and J. Hjortkjaer (2018)](https://zenodo.org/record/1199011)  | [Zenodo](https://zenodo.org/record/1199011)  | 18 subjects listening to one of two competing speech audio streams  |
 
 ### Stage 2: Modelling
 

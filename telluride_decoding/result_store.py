@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@ For example, data arrives in minibatches with num_frames frames at a time, but
 needs to be retrieved with segments of size window_size.
 
 The three clases do the following (briefly for context):
-NumpyStore: Basic storage of one signal
-WindowedDataStore: Above, plus retrieve pieces (windows) of the data
-TwoResultStore: Two of the WindowedDataStore, for two signals.
+  NumpyStore: Basic storage of one signal
+  WindowedDataStore: Above, plus retrieve pieces (windows) of the data
+  TwoResultStore: Two of the WindowedDataStore, for two signals.
 """
 
+from typing import Iterator, Optional, Tuple
 from absl import logging
 import numpy as np
 
@@ -50,7 +51,7 @@ class NumpyStore(object):
     count: How many elements are in the buffer (mostly for debugging).
   """
 
-  def __init__(self, init_frame_count=10000, name='Generic'):
+  def __init__(self, init_frame_count: int = 10000, name: str = 'Generic'):
     """Creates the class, and store the initial frame count.
 
     Args:
@@ -67,17 +68,17 @@ class NumpyStore(object):
     self._name = name
 
   @property
-  def count(self):
+  def count(self) -> int:
     return self._count
 
   @property
-  def all_data(self):
+  def all_data(self) -> Optional[np.ndarray]:
     """Returns all the data accumulated so far."""
     if self._data_store is None:
       return None
     return self._data_store[:self._count, :]
 
-  def create_storage(self, data):
+  def create_storage(self, data: np.ndarray):
     """Creates the storage needed for the signals, increasing size as needed.
 
     This routine allocates the initial storage (an np array) when first called
@@ -104,10 +105,10 @@ class NumpyStore(object):
       self._grow_storage(data)
     if data.shape[1] != self._data_store.shape[1]:
       raise ValueError(
-          'Data\'s shape has changed, and this is not allowed.(%d to %d).' %
+          'Data\'s shape has changed, and this is not allowed (%d to %d).' %
           (self._data_store.shape[1], data.shape[1]))
 
-  def _grow_storage(self, data):
+  def _grow_storage(self, data: np.ndarray):
     current_size = self._data_store.shape[0]
     new_size = max(current_size*2, current_size + 2*data.shape[0])
     new_data_store = np.zeros((new_size, data.shape[1]))
@@ -117,7 +118,7 @@ class NumpyStore(object):
                  self._name,
                  self._data_store.shape[0], self._data_store.shape[1])
 
-  def add_data(self, data):
+  def add_data(self, data: np.ndarray):
     """Adds some data to the cache.
 
     Data should be num_frames x num_channels in size.
@@ -140,7 +141,7 @@ class NumpyStore(object):
     self._data_store[start:finish, :] = data
     self._count += data.shape[0]
 
-  def next_window(self, window_size):
+  def next_window(self, window_size: int) -> Iterator[Optional[np.ndarray]]:
     """Fetch fixed window size data from beginning (earliest time) of the cache.
 
     Args:
@@ -181,8 +182,10 @@ class WindowedDataStore(NumpyStore):
         Process data, which has size (2*half_window_width+1) x num_features
   """
 
-  def __init__(self, window_step=100, window_width=None, pre_context=0,
-               initial_frame_count=100):
+  def __init__(self, window_step: int = 100,
+               window_width: Optional[int] = None,
+               pre_context: int = 0,
+               initial_frame_count: int = 100):
     """Creates the storage object.
 
     Note: this class only handles integer step sizes, so downsampling by a
@@ -223,7 +226,7 @@ class WindowedDataStore(NumpyStore):
     self._data_store = None    # Where we store the data till it is used.
     self._count = 0
 
-  def create_storage(self, data):
+  def create_storage(self, data: np.ndarray):
     """Create the storage needed for the signals.
 
     Args:
@@ -247,7 +250,7 @@ class WindowedDataStore(NumpyStore):
     if data.shape[1] != self._data_store.shape[1]:
       raise ValueError('Data\'s shape has changed, and this is not allowed.')
 
-  def next_window(self):
+  def next_window(self) -> Iterator[Optional[np.ndarray]]:
     """Iterator that returns the next window of data.
 
     Also removes the no-longer needed data by shifting the data in the internal
@@ -269,7 +272,7 @@ class WindowedDataStore(NumpyStore):
 
 
 class TwoResultStore(object):
-  """Class for storing a signal and pulling fixed-sized windows out to process.
+  """Class for storing two signals and pulling out two fixed-sized windows.
 
   Note: this class uses the AudioDataStore class as its underlying storage,
   which by default returns windows of window_width starting from frame 0.
@@ -282,8 +285,10 @@ class TwoResultStore(object):
       return the original data.
   """
 
-  def __init__(self, window_width=100, window_step=100, pre_context=0,
-               initial_frame_count=100):
+  def __init__(self, window_width: int = 100,
+               window_step: int = 100,
+               pre_context: int = 0,
+               initial_frame_count: int = 100):
     """Creates the storage object.
 
     Args:
@@ -302,10 +307,10 @@ class TwoResultStore(object):
         initial_frame_count=initial_frame_count)
 
   @property
-  def all_data(self):
+  def all_data(self) -> Tuple[np.ndarray, np.ndarray]:
     return self._store1.all_data, self._store2.all_data
 
-  def add_data(self, s1, s2):
+  def add_data(self, s1: np.ndarray, s2: np.ndarray):
     """Adds some data to the cache, two parallel signals in this case.
 
     Args:
@@ -318,13 +323,14 @@ class TwoResultStore(object):
     self._store1.add_data(s1)
     self._store2.add_data(s2)
 
-  def next_window(self):
+  def next_window(self) -> Iterator[Tuple[Optional[np.ndarray],
+                                          Optional[np.ndarray]]]:
     """Iterator that returns the next window of data.
 
     Also removes the no-longer needed data from the internal cache.
 
     Yields:
-      Two sets of data, each representing window_width frames.
+      Two sets of data, each representing window_width frames, if available.
     """
     for p1 in self._store1.next_window():
       for p2 in self._store2.next_window():

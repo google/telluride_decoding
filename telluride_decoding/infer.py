@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ using a test file. The code creates summary plots and calculates final accuracy.
 import collections
 import numbers
 import os
+from typing import Dict, List, Optional, Tuple, Union
 
 from absl import app
 from absl import flags
@@ -42,22 +43,19 @@ from telluride_decoding import brain_model
 from telluride_decoding import cca
 from telluride_decoding import infer_decoder
 
-import tensorflow.compat.v2 as tf
-# End user should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf
 
-base_tf_dir = 'test_data/aad'
+base_tf_dir = '/tmp/data/aad'
 default_tf_dir = os.path.join(base_tf_dir, '001_2019-09-19/tfrecords/all')
 
-base_summary_dir = 'test_data/tf2'
+base_summary_dir = '/tmp/infer_results'
+
 default_model_dir = os.path.join(base_summary_dir,
-                                 '001_2019-09-19_all',
-                                 '001_2019-09-19_all_CCA', 'model')
+                                 'model')
 default_plot_dir = os.path.join(base_summary_dir,
-                                '001_2019-09-19_all',
-                                '001_2019-09-19_all_CCA')
+                                'plots')
 
 default_test_file = os.path.join(base_tf_dir,
-                                 '001_2019-09-19', 'tfrecords', 'all',
                                  'test', 'Trial 05.tfrecords')
 
 flags.DEFINE_string('tf_dir', default_tf_dir,
@@ -69,12 +67,12 @@ flags.DEFINE_string('plot_dir', default_plot_dir,
 flags.DEFINE_string('save_results_csv', None,
                     'Path to results csv file')
 
-flags.DEFINE_multi_string('training_file', [],
+flags.DEFINE_multi_string('train_files', [],
                           'Training files to calculate parameters for the final'
                           'decoding test.')
-flags.DEFINE_string('infer_test_file', default_test_file,
-                    'Testing file to evaluate with which to verify '
-                    'performance.')
+flags.DEFINE_multi_string('test_files', default_test_file,
+                          'Testing files to evaluate with which to verify '
+                          'performance.')
 
 flags.DEFINE_integer('window_width', 1000,
                      'Number of frames of data to use when estimating '
@@ -91,8 +89,8 @@ flags.DEFINE_enum('reduction', 'lda',
                   ['first', 'second', 'lda', 'mean', 'mean-squared', 'all'],
                   'How to reduce decoder dimensionality to a scalar.')
 
-# Use separate variable so we can iterate over the valid options in
-# run_comparison_test()
+# Define variable so we can use for valid flags and iterate over the valid
+# options in run_comparison_test()
 allowable_decoder_types = ['wta', 'stepped', 'ssd']
 
 flags.DEFINE_enum('decoder', 'wta', allowable_decoder_types,
@@ -102,19 +100,27 @@ flags.DEFINE_bool('window_test', False,
 flags.DEFINE_bool('comparison_test', False,
                   'Run a test with all decoders and infers')
 flags.DEFINE_string('audio_label', 'loudness',
-                    'TFRecord field containing the audio signal')
+                    'TFRecord field containing the audio signal.'
+                    'The second speaker is this label with 2 appended.')
 
 FLAGS = flags.FLAGS
 
 
-def create_brain_data(tf_dir, train_files, test_files, params, audio_label):
+def create_brain_data(tf_dir: str,
+                      train_files: Union[str, List[str]],
+                      test_files: Union[str, List[str]],
+                      params: Dict[str, Union[int, str]],
+                      audio_label: str) -> brain_data.BrainData:
   """Creates a braindata object from which we can get train and test datasets.
 
   Args:
     tf_dir: Where to find the training and testing files.
     train_files: A list of files to be used for training (within tf_dir).
+      Can also be a regular expression.
     test_files: A list of files to be used for testing (within tf_dir).
-    params: A dictionary with context parameters needed for preprocessing.
+      Can also be a regular expression.
+    params: A dictionary with context parameters needed for preprocessing,
+      and field names for feature dictionary.
     audio_label: Which feature from the tfrecord file contains the audio
       data for this experiment. Typically loudness or loudness2.
 
@@ -164,7 +170,9 @@ def create_brain_data(tf_dir, train_files, test_files, params, audio_label):
   return exp_brain_data
 
 
-def calculate_time_axis(data, window_step, window_width, frame_rate):
+def calculate_time_axis(
+    data: Union[numbers.Number, float, List[float], np.ndarray],
+    window_step: int, window_width: int, frame_rate: float) -> np.ndarray:
   """Calculates the time axis (in minutes) for a windowed signal.
 
   Data originates by windowing data with the given window width and step.
@@ -191,14 +199,19 @@ def calculate_time_axis(data, window_step, window_width, frame_rate):
   return (np.arange(num_points)*window_step+window_width/2.0)/frame_rate/60.0
 
 
-def get_data_for_model(tf_dir, train_file, test_file, model_object,
-                       audio_label_1, audio_label_2):
-  """Gets all the brain_data objects needed for trainin and testing.
+def get_data_for_model(
+    tf_dir: str, train_files: str, test_files: str,
+    model_object: infer_decoder.Decoder,
+    audio_label_1: str, audio_label_2: str) -> Tuple[tf.data.Dataset,
+                                                     tf.data.Dataset,
+                                                     tf.data.Dataset,
+                                                     tf.data.Dataset]:
+  """Gets all the brain_data objects needed for training and testing.
 
   Args:
     tf_dir: where to find all the .tfrecords files.
-    train_file: a regular expression matching the training files in tf_dir.
-    test_file: a regular expression matching the testing files in tf_dir.
+    train_files: a regular expression matching the training files in tf_dir.
+    test_files: a regular expression matching the testing files in tf_dir.
     model_object: a brain_model object which we use to make sure the sizes
       of the train and test data are compatible.
     audio_label_1: Field name for the audio from speaker 1
@@ -211,10 +224,10 @@ def get_data_for_model(tf_dir, train_file, test_file, model_object,
       training file for speaker 2 (loudness2 feature)
       test file for speaker 2 (loudness2 feature)
   """
-  brain_data_1 = create_brain_data(tf_dir, train_file, test_file,
+  brain_data_1 = create_brain_data(tf_dir, train_files, test_files,
                                    model_object.decoding_model_params,
                                    audio_label_1)  # Speaker 1
-  brain_data_2 = create_brain_data(tf_dir, train_file, test_file,
+  brain_data_2 = create_brain_data(tf_dir, train_files, test_files,
                                    model_object.decoding_model_params,
                                    audio_label_2)  # Speaker 2
 
@@ -231,7 +244,20 @@ def get_data_for_model(tf_dir, train_file, test_file, model_object,
   return bd1_train, bd1_test, bd2_train, bd2_test
 
 
-def regress_and_correlate(model_object, test_data, window_size):
+def regress_and_correlate(model_object: infer_decoder.Decoder,
+                          test_data: tf.data.Dataset,
+                          window_size: int) -> Tuple[List[float], List[float]]:
+  """Run the model, combining frames of results, and averaging for each window.
+
+  Args:
+    model_object: The decoder object (after picking the appropriate dimensions.)
+    test_data: Dataset stream to use for testing this model
+    window_size: How many frames to use for computing the window's results.
+
+  Returns:
+    Two lists, one of correlations and the other of the averaged label over the
+    window.
+  """
   full_results = []
   labels = []
   for results, label in model_object.test_by_window(test_data, window_size):
@@ -240,15 +266,16 @@ def regress_and_correlate(model_object, test_data, window_size):
   return full_results, labels
 
 
-def load_model(model_dir, reducer):
-  """Loads a model from disk.
+def load_model(model_dir: str,
+               reducer: str) -> infer_decoder.Decoder:
+  """Loads a TF model from disk.
 
   Args:
     model_dir: Where to find the TF model on disk.
     reducer: What type of correlation reducer to use, a string.
 
   Returns:
-    An infer_decoder.AttentionStateDecoder object.
+    An infer_decoder.Decoder object.
 
   Raises:
     IOError: Raises error if we can't load the model parameters for decoding.
@@ -271,7 +298,7 @@ def load_model(model_dir, reducer):
   return model_object
 
 
-def find_first_segment(labels):
+def find_first_segment(labels: Union[List[float], np.ndarray]) -> int:
   """Finds the first section of data based on the ground truth.
 
   This is used to train the SSD's probability models, by looking for the first
@@ -297,17 +324,27 @@ def find_first_segment(labels):
   return 0
 
 
-def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
-                       decoder_type, audio_label_1, audio_label_2,
-                       plot_dir=None):
+def run_reduction_test(model_dir: str, tf_dir: str, train_files: str,
+                       test_files: str, reduction: str, decoder_type: str,
+                       audio_label_1: str, audio_label_2: str,
+                       plot_dir: Optional[str] = None) -> Dict[int, float]:
   """Runs a complete test for a given reduction and decoder type.
+
+  For the given precomputed decoding model:
+    Train the inference parameters (correlation means and LDA parameters) if
+    necessary. Then for each window size:
+      Compute likelihoods/correlations for the model given each audio signal.
+      Find consistent section at the start to train SSD decoder probabilities.
+      Calculate fraction of decoding results that are correct
+      Plot results for this reducer and decoder type.
 
   Args:
     model_dir: Where to find the model used to initialize the data. If there is
       no model, then the train_file pattern is used to find training data.
     tf_dir: A directory containing .tfrecord files for training and/or testing.
-    train_file: Which files to use for training, a regular expression in tf_dir.
-    test_file: Which files to use for testing, a regular expression in tf_dir.
+    train_files: Which files to use for training, a regular expression for files
+      in tf_dir.
+    test_files: Which files to use for testing, a regular expression in tf_dir.
     reduction: One of the valid CCA reduction techniques
     decoder_type: One of the valid AttentionDecoder type names.
     audio_label_1: Field name for the audio from speaker 1
@@ -321,19 +358,22 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
   print('Running regression test with %s.' % reduction)
   model_object = load_model(model_dir, reduction)
 
+  # Get brain_decoding (bd) dataset objects for each audio source and for
+  # train (inference parameters) and test (performance) conditions.
   bd1_train, bd1_test, bd2_train, bd2_test = get_data_for_model(
-      tf_dir, train_file, test_file, model_object,
+      tf_dir, train_files, test_files, model_object,
       audio_label_1, audio_label_2)
 
   if model_object.decoding_model_params:
-    print('Found saved mode, no need to train the decoding model.')
+    print('Found saved model, no need to train the decoding model.')
+    print(f' Decoding_params are: {model_object.decoding_model_params}')
   else:
+    # Calculate correlation means and LDA parameters
     model_object.train(bd1_train, bd2_train)
-    print('Finished the model training.')
+    print('Finished the inference model training.')
 
   window_results = []
   window_list = [10, 100, 200, 400, 700, 1000]
-  print('Infer Classification window_size are:', window_list)
   for window_size in window_list:
     window_step = window_size // 2
 
@@ -358,15 +398,23 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
     # Calculate the decoded attention results.
     attention = np.array([decoder.attention(c1, c2) for c1, c2
                           in zip(d1_results, d2_results)])
-    labels = np.asarray(labels)
+    labels = np.reshape(np.asarray(labels), (-1, 1))
+    # Note: Attention is a logical variable indicating attention to first stream
 
-    correct = np.logical_xor(attention[:, 0] >= 0.5, labels)
+    # TODO: Really should always get a boolean.
+    # Note: returned attention signal is a logical saying attending to speaker 0
+    correct = np.logical_xor(attention[:, 0:1] >= 0.5, labels)
     frac_correct = np.sum(correct)/float(len(correct))
     window_results.append(frac_correct)
 
+    d1_results = np.reshape(np.asarray(d1_results), (-1, 1))
+    d2_results = np.reshape(np.asarray(d2_results), (-1, 1))
+
     if plot_dir:
+      tf.io.gfile.makedirs(plot_dir)
       title = 'AAD Correlation on %s with %gs windows %g%% accuracy.' % (
-          os.path.split(test_file)[1], window_size/100.0, frac_correct*100.0)
+          os.path.split(test_files[0])[1], window_size/100.0,
+          frac_correct*100.0)
       t = calculate_time_axis(np.asarray(d1_results), window_step,
                               window_size, FLAGS.frame_rate)
       plt.clf()
@@ -374,7 +422,9 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
                                          linecolor='blue')
       attention_decoder.plot_aad_results(np.asarray(d2_results), t=t,
                                          linecolor='red')
-      attention_decoder.plot_aad_results(attention[:, 0], t=t,
+      scale = max(float(np.max(np.asarray(d1_results))),
+                  float(np.max(np.asarray(d2_results))))
+      attention_decoder.plot_aad_results(attention[:, 0]*scale/2.0, t=t,
                                          attention_flag=np.asarray(labels),
                                          decision_upper=attention[:, 1],
                                          decision_lower=attention[:, 2],
@@ -390,7 +440,7 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
       print('Saved final test attention switch result plot to', plot_file)
 
   print('Infer classification result for %s with %s and %s: %s' %
-        (os.path.join(tf_dir, test_file), reduction,
+        (os.path.join(tf_dir, test_files[0]), reduction,
          decoder_type, window_results))
   if FLAGS.save_results_csv is not None:
     print('Saving results to {}'.format(FLAGS.save_results_csv))
@@ -404,7 +454,7 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
     plt.xlabel('Window Size (frames)')
     plt.ylabel('Fraction correct')
     plt.title('Testing with %s, reducing with %s, decoding with %s' %
-              (os.path.split(test_file)[1], reduction, decoder_type))
+              (os.path.split(test_files[0])[1], reduction, decoder_type))
     plot_file = os.path.join(plot_dir, 'test_results_%s_%s.png' %
                              (reduction, FLAGS.decoder))
     with tf.io.gfile.GFile(plot_file, 'wb') as fp:
@@ -414,16 +464,21 @@ def run_reduction_test(model_dir, tf_dir, train_file, test_file, reduction,
   return dict(zip(window_list, window_results))
 
 
-def run_comparison_test(model_dir, tf_dir, training_file, test_file,
-                        audio_label, audio_label_2, plot_dir,
-                        reduction_list, decoder_list=None):
+def run_comparison_test(model_dir: str, tf_dir: str,
+                        train_files: str, test_files: str,
+                        audio_label: str, audio_label_2: str, plot_dir: str,
+                        reduction_list: List[str],
+                        decoder_list: Optional[List[str]] = None):
   """Runs a test comparing all the different reducers and decoders.
+
+  Calls run_reduction_test for each kind of decoder (wta, ssd, etc) and each
+  kind of reducer (lda, first, etc).
 
   Args:
     model_dir: Directory containing the pretrained model.
     tf_dir: Directory containing the TFRecord data for training and testing.
-    training_file: Regular expression that picks the training data.
-    test_file: Regular expression that picks the testing data.
+    train_files: Regular expression that picks the training data.
+    test_files: Regular expression that picks the testing data.
     audio_label: The feature name for the attended audio loudness data.
     audio_label_2: The feature name for the unattended audio loudness data.
     plot_dir: Where to store the output plots.
@@ -439,7 +494,7 @@ def run_comparison_test(model_dir, tf_dir, training_file, test_file,
       print('Running the regression test with %s and %s.' %
             (reduction, decoder))
       results = run_reduction_test(model_dir, tf_dir,
-                                   training_file, test_file,
+                                   train_files, test_files,
                                    reduction, decoder,
                                    audio_label, audio_label_2,
                                    plot_dir)
@@ -459,7 +514,7 @@ def run_comparison_test(model_dir, tf_dir, training_file, test_file,
   if plot_dir:
     plt.xlabel('Window Size (frames)')
     plt.ylabel('Fraction correct')
-    plt.title('Testing with %s' % os.path.split(FLAGS.infer_test_file)[1])
+    plt.title('Testing with %s' % os.path.split(FLAGS.test_files[0])[1])
     plt.legend()
 
     plot_file = os.path.join(FLAGS.plot_dir, 'test_results-comparison.png')
@@ -482,17 +537,16 @@ def main(argv):
   print('FLAGS.reduction is', FLAGS.reduction)
   if FLAGS.comparison_test:
     run_comparison_test(FLAGS.model_dir, FLAGS.tf_dir,
-                        FLAGS.training_file, FLAGS.infer_test_file,
+                        FLAGS.train_files, FLAGS.test_files,
                         FLAGS.audio_label, FLAGS.audio_label + '2',
                         FLAGS.plot_dir,
                         reduction_list=['first', 'lda'])
   else:
-    run_reduction_test(FLAGS.model_dir, FLAGS.tf_dir, FLAGS.training_file,
-                       FLAGS.infer_test_file, FLAGS.reduction, FLAGS.decoder,
+    run_reduction_test(FLAGS.model_dir, FLAGS.tf_dir, FLAGS.train_files,
+                       FLAGS.test_files, FLAGS.reduction, FLAGS.decoder,
                        FLAGS.audio_label, FLAGS.audio_label + '2',
                        FLAGS.plot_dir)
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   app.run(main)

@@ -84,7 +84,6 @@ class RegressionTest(absltest.TestCase):
                         if f.startswith(pattern)])
     return all_files
 
-
 if __name__ == '__main__':
   tf.compat.v1.enable_v2_behavior()
   absltest.main()

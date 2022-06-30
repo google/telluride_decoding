@@ -17,25 +17,65 @@
 
 TF models and code to predict MEG/EEG signals from their input audio features,
 or vice versa.
+
+BrainData is a class that tells us everything we need to know about a source
+of data used to train or evaluate a BrainModel.  Use the create_dataset method
+to get the underlying tf.data object needed to pass to the TF/Keras functions.
 """
 
 import os
 import random
 import re
 import sys
+from typing import List, Optional, Tuple, Union
 
 from absl import logging
 
 import numpy as np
 
 from telluride_decoding import preprocess
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf
 
 
 brain_data_print = sys.stdout  # Feel free to redirect this elsewhere.
 
 # pylint: disable=g-long-lambda
+
+
+def mismatch_batch_randomization(
+    x: tf.Tensor, x2: tf.Tensor, y: tf.Tensor, a: tf.Tensor) -> Tuple[
+        tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
+  """Mixup some of the input & output to train a match-mismatch classifier.
+
+  This will be used as part of a tf.data.dataset map function.
+  Even sample numbers in the batch remain the same, and become class y=0.
+  Odd sample numbers are shuffled and y is set to 1 to indicate the mismatch
+  condition. The two sets of data are concatenated (matched then mismatched).
+
+  Be sure to call this after the dataset has been shuffled so that we aren't
+  generating mismatch data in close temporal proximity to the the original data.
+
+  Needed to implement the test from this paper:
+    Auditory Stimulus-response Modeling with a Match-Mismatch Task
+    Alain de Cheveigné, Malcolm Slaney, Søren A. Fuglsang, Jens Hjortkjaer
+    Journal of Neural Engineering, 2021.
+
+  Args:
+    x: First source input (i.e EEG waveforms)
+    x2: Second input for classifier (i.e. audio envelope)
+    y: Desired class, ignored and rewritten to reflect match/mismatch state
+    a: Attentional signal, ignored
+
+  Returns:
+    A tuple: where x is unchanged, x2 is shuffled, y indicate whether x
+    and x2 are matched (0) or mismatched (1), a is unchanged.
+  """
+  # TODO: Hook this up to the main decoding program.
+  del y
+  new_x2 = tf.concat((x2[0::2, :], tf.random.shuffle(x2[1::2, :])), axis=0)
+  new_y = tf.concat((0*x2[0::2, :1], 1+0*x2[1::2, :1]), axis=0)
+  return x, new_x2, new_y, a
+
 
 ######################### Brain Data Classes ##############################
 
@@ -48,29 +88,33 @@ class BrainData(object):
   processing by the rest of the decoding system. Use the create_dataset method
   to get a tf.data.Dataset object given a BrainData object.
 
-  The resulting dataset object represents a stream of two-ples, consisting of:
+  Use the create_dataset method to get a tf.data.Dataset object you can use
+  for training. The resulting dataset object represents a stream of two-ples,
+  consisting of:
     input_dictionary, output_data
   where the input dictionary has three keys
     input_1, input_2 (might be empty), and attended_speaker (might be empty).
   """
 
-  def __init__(self, in_fields, out_field,
-               frame_rate,
-               pre_context=0,
-               post_context=0,
-               in2_fields=None,
-               in2_pre_context=0,
-               in2_post_context=0,
-               attended_field=None,
-               initial_batch_size=1000,
-               final_batch_size=1000,
-               repeat_count=1,
-               shuffle_buffer_size=1000,
-               data_dir=None,
-               data_pattern='',
-               train_file_pattern='',
-               validate_file_pattern='',
-               test_file_pattern=''):
+  def __init__(self,
+               in_fields: Union[str, List[str]],
+               out_field: Union[str, List[str]],
+               frame_rate: float,
+               pre_context: int = 0,
+               post_context: int = 0,
+               in2_fields: Optional[Union[str, List[str]]] = None,
+               in2_pre_context: int = 0,
+               in2_post_context: int = 0,
+               attended_field: Optional[str] = None,
+               initial_batch_size: int = 1000,
+               final_batch_size: int = 1000,
+               repeat_count: int = 1,
+               shuffle_buffer_size: int = 1000,
+               data_dir: Optional[str] = None,
+               data_pattern: str = '',
+               train_file_pattern: str = '',
+               validate_file_pattern: str = '',
+               test_file_pattern: str = ''):
     """Describes the type of data we are using in this experiment.
 
     This class encapsulates everything we know about the dataset, so we can
@@ -150,7 +194,7 @@ class BrainData(object):
     self._cached_file_names = []  # Initialize cache for this list if needed.
     self.all_files()   # preload data files so we know what the data looks like.
 
-  def all_files(self, max_count=0):
+  def all_files(self, max_count: int = 0):
     """Returns a list of files available for this class."""
     if not self._cached_file_names:
       # Load the potential files if we haven't already.
@@ -161,14 +205,16 @@ class BrainData(object):
       return self._cached_file_names[:max_count]
     return self._cached_file_names
 
-  def set_file_patterns(self, train, validate, test):
+  def set_file_patterns(self, train: str, validate: str, test: str):
     logging.info('brain_data setting file patterns to %s, %s, %s',
                  train, validate, test)
     self.train_file_pattern = train
     self.validate_file_pattern = validate
     self.test_file_pattern = test
 
-  def create_dataset(self, mode='train', temporal_context=True):
+  def create_dataset(self, mode: str = 'train',
+                     temporal_context: bool = True,
+                     mixup_batch: bool = False):
     """Creates the full TF dataset, ready to feed an estimator.
 
     This class should be specialized.  The basic flow is:
@@ -186,10 +232,11 @@ class BrainData(object):
       temporal_context: Flag that controls whether we add temporal context to
         the data. Normally true, but set to false to extract the original data
         without context (for debugging and prediction.)
+      mixup_batch: Mixup the data to test the null hypothesis.
     """
     raise NotImplementedError
 
-  def _get_data_file_names(self):
+  def _get_data_file_names(self) -> Optional[List[str]]:
     """Get the data pathnames for this dataset.
 
     Just a dummy list of names by default for classes that synthesize data.
@@ -200,7 +247,7 @@ class BrainData(object):
     """
     self._cached_file_names = []  # No files by default
 
-  def filter_file_names(self, mode):
+  def filter_file_names(self, mode: str) -> List[str]:
     """Filters all available files based on the experiment mode (train, test...)
 
     Depending on the training/testing mode, filter the available files into
@@ -271,14 +318,20 @@ class BrainData(object):
     logging.info(' Files for %s are: %s', mode, filename_list)
     return filename_list
 
-  def final_shuffle_and_batch(self, mode, input_dataset, mixup_batch=False):
+  def final_shuffle_and_batch(self, mode: str,
+                              input_dataset: tf.data.Dataset,
+                              mixup_batch=False,
+                              mismatch_batch=False) -> tf.data.Dataset:
     """Does all the work we need to do prepare the dataset for serving.
 
     Args:
       mode: Train or testing mode, which determines whether data is shuffled.
       input_dataset: The actual TF dataset to prepare.
       mixup_batch: Whether the inputs and outputs are randomized with respect
-        to each other.
+        to each other. This is done for the entire batch to test the null-
+        hypothesis (there is is no model connecting inputs and outputs).
+      mismatch_batch: Whether to shuffle half the inputs so we can test in a
+        match-mismatch paradigm.
 
     Returns:
       The final dataset object.  This dataset has two components: a dictionary
@@ -311,12 +364,14 @@ class BrainData(object):
     # few samples at the end shouldn't matter for real (big) datasets.
     batched_dataset = shuffled_dataset.batch(self.final_batch_size,
                                              drop_remainder=True)
+    if mismatch_batch:
+      batched_dataset.map(mismatch_batch_randomization)
 
+    # TODO: This might need a better name since
+    # mixup means something else now: https://arxiv.org/abs/1710.09412
     if mixup_batch:
-      print('final_shuffle_and_batch: Mixing up the batches of data '
-            'for testing!!!!', file=brain_data_print)
-      logging.warning('final_shuffle_and_batch: Mixing up the batches of data '
-                      'for testing!!!!')
+      logging.info('final_shuffle_and_batch: Mixing up the batches of data '
+                   'for testing!!!!')
       def mixup_batch_function(x, x2, y, a):
         """Mixup the order of the labels so data is mismatched. For baseline."""
         return x, tf.random.shuffle(x2), tf.random.shuffle(y), a
@@ -333,7 +388,8 @@ class BrainData(object):
                  mode, final_dataset)
     return final_dataset
 
-  def add_temporal_context(self, dataset_without_context):
+  def add_temporal_context(
+      self, dataset_without_context: tf.data.Dataset) -> tf.data.Dataset:
     """Adds context to a datstream.
 
     Create a dataset stream from files of TFRecords, containing input and
@@ -361,7 +417,9 @@ class BrainData(object):
       TypeError for bad parameter values.
     """
 
-    def window_one_stream_new(x, pre_context, post_context):
+    def window_one_stream_new(x: tf.Tensor,
+                              pre_context: int,
+                              post_context: int) -> tf.data.Dataset:
       """Create extra temporal context for one stream of data."""
       logging.info(' Window_one_stream: adding %d and %d frames of context '
                    'to stream.', pre_context, post_context)
@@ -379,8 +437,10 @@ class BrainData(object):
       new_x = tf.data.Dataset.from_tensor_slices(flat_data)
       return new_x
 
-    def window_data(x, x2, y, a, pre_context=0, post_context=0,
-                    in2_pre_context=0, in2_post_context=0):
+    def window_data(x: tf.Tensor, x2: tf.Tensor, y: tf.Tensor, a: tf.Tensor,
+                    pre_context: int = 0, post_context: int = 0,
+                    in2_pre_context: int = 0,
+                    in2_post_context: int = 0) -> tf.data.Dataset:
       """Creates extra temporal context for both input streams."""
       x_with_context = window_one_stream_new(x, pre_context, post_context)
       x2_with_context = window_one_stream_new(x2, in2_pre_context,
@@ -407,7 +467,7 @@ class BrainData(object):
       new_dataset = dataset_without_context
     return new_dataset
 
-  def input_fields_width(self, input_number=1):
+  def input_fields_width(self, input_number: int = 1) -> int:
     """Computes the width of the input.
 
     Sum up the width of all the fields to pass this to the estimator ---
@@ -445,7 +505,7 @@ class BrainData(object):
     else:
       return sum(widths)*(self.in2_pre_context+1+self.in2_post_context)
 
-  def output_field_width(self):
+  def output_field_width(self) -> int:
     if self.out_field not in list(self.features.keys()):
       raise ValueError('Could not find output_field **%s** in %s' %
                        (self.out_field, self.features.keys()))
@@ -455,8 +515,8 @@ class BrainData(object):
 class TestBrainData(BrainData):
   """Dataset which produces fixed (saved) values, useful for testing."""
 
-  def create_dataset(self, mode='train', temporal_context=True,
-                     mixup_batch=False):
+  def create_dataset(self, mode: str = 'train', temporal_context: bool = True,
+                     mixup_batch: bool = False) -> tf.data.Dataset:
     """Creates the full TF dataset, ready to feed an estimator.
 
     This is the default entry into this class, creating a dataset for training,
@@ -489,8 +549,12 @@ class TestBrainData(BrainData):
     return self.final_shuffle_and_batch(mode, saved_dataset,
                                         mixup_batch=mixup_batch)
 
-  def preserve_test_data(self, input_data, output_data,
-                         input2_data=None, attention_data=None):
+  def preserve_test_data(
+      self,
+      input_data: Union[List[float], np.ndarray],
+      output_data: Union[List[float], np.ndarray],
+      input2_data: Optional[Union[List[float], np.ndarray]] = None,
+      attention_data: Optional[Union[List[float], np.ndarray]] = None):
     """Puts some data into a dataset for testing.
 
     Args:
@@ -559,6 +623,8 @@ class TFExampleData(BrainData):
       raise ValueError('Missing data_dir in TFExampleData initialization. '
                        'Must specify the source of the data (FLAGS.tfrecords).')
 
+    print('Reading TFExample data from %s, filtering for **%s**' %
+          (self.data_dir, self.data_pattern))
     logging.info('Reading TFExample data from %s, filtering for **%s**',
                  self.data_dir, self.data_pattern)
     if not isinstance(self.data_dir, str):
@@ -577,14 +643,17 @@ class TFExampleData(BrainData):
       ]
     logging.info('Found %d files for TFExample data analysis.',
                  len(self._cached_file_names))
+    print('Found: %s' % self._cached_file_names)
     if not self._cached_file_names:
       raise ValueError('Should not have an empty list of data files from %s.' %
                        exp_data_dir)
     self.features = discover_feature_shapes(self._cached_file_names[0])
     logging.info('Discover_feature_shapes found: %s', self.features)
 
-  def create_dataset(self, mode='train', temporal_context=True,
-                     mixup_batch=False):
+  def create_dataset(self, mode: str = 'train',
+                     temporal_context: bool = True,
+                     mixup_batch: bool = False,
+                     mismatch_batch: bool = False) -> tf.data.Dataset:
     """Create the full TF dataset, ready to feed an estimator.
 
     This is the default entry into this class, creating a dataset for training,
@@ -598,6 +667,8 @@ class TFExampleData(BrainData):
         without context (for debugging and prediction.)
       mixup_batch: Whether the inputs and outputs are randomized with respect
         to each other.
+      mismatch_batch: Whether some of the inputs are mixed up so we can do a
+        match-mismatch test.
 
     Returns:
       The requested tf.data.dataset object.
@@ -607,8 +678,9 @@ class TFExampleData(BrainData):
     """
     filename_list = self.filter_file_names(mode)
     if not filename_list:
-      raise ValueError('No files to process in mode %s from %s' %
-                       (mode, self.data_dir))
+      raise ValueError('No files to process in mode %s from directory %s: %s' %
+                       (mode, self.data_dir, self.all_files()))
+
     filename_dataset = tf.data.Dataset.from_tensor_slices(filename_list)
 
     # Map over all the filename (strings) using interleave so we get some extra
@@ -619,9 +691,11 @@ class TFExampleData(BrainData):
             x, temporal_context=temporal_context),
         len(filename_list))
     return self.final_shuffle_and_batch(mode, interleaved_dataset,
-                                        mixup_batch=mixup_batch)
+                                        mixup_batch=mixup_batch,
+                                        mismatch_batch=mismatch_batch)
 
-  def read_data_into_dataset(self, filenames, temporal_context=True):
+  def read_data_into_dataset(self, filenames: tf.Tensor,
+                             temporal_context: bool = True) -> tf.data.Dataset:
     """Prepares a specific example of data for this dataset.
 
     Dataset creation function that takes filename(s) and outputs the proper
@@ -630,7 +704,7 @@ class TFExampleData(BrainData):
 
     Args:
       filenames: a tensor containing one (usual case due to interleave) or more
-      filenames from which to read the data.
+        filenames from which to read the data.
       temporal_context: Should we add the temporal context to the input data?
 
     Returns:
@@ -653,7 +727,9 @@ class TFExampleData(BrainData):
       parsed_data = self.add_temporal_context(parsed_data)
     return parsed_data
 
-  def preprocess_list(self, name_params_list, frame_rate):
+  def preprocess_list(self,
+                      name_params_list: Union[List[str], str],
+                      frame_rate: float) -> List[preprocess.Preprocessor]:
     if not name_params_list:
       return []
     pp_list = []
@@ -662,7 +738,9 @@ class TFExampleData(BrainData):
                                              frame_rate))
     return pp_list
 
-  def parse_and_select_from_tfrecord(self, raw_proto):
+  def parse_and_select_from_tfrecord(
+      self, raw_proto: str) -> Tuple[tf.Tensor, tf.Tensor,
+                                     tf.Tensor, tf.Tensor]:
     """Dataset map function that parses a TFRecord example and select fields.
 
     Note, this routine has a special hack to create a field called "ones" which
@@ -719,14 +797,16 @@ class TFExampleData(BrainData):
       logging.info('Did not find %s field for attention, so synthesizing one.',
                    self.attended_field)
       # Placeholder.  Just get some 0/1 data into this field. Keep it as a float
-      # since the original attend field is a float.
-      attended_data = tf.cast(in_data[0:1] > 0, tf.float32)
+      # since the original attend field is a float.  Default to attend to spkr 0
+      attended_data = tf.cast(in_data[0:1]*0, tf.float32)
 
     return in_data, in2_data, out_data, attended_data
 
   # TODO Switch to this new parse function so we can do pre-
   # processing on the fly.  Right now it doesn't work yet.
-  def parse_and_select_from_tfrecord2(self, raw_proto):
+  def parse_and_select_from_tfrecord2(
+      self, raw_proto: str) -> Tuple[tf.Tensor, tf.Tensor,
+                                     tf.Tensor, Optional[tf.Tensor]]:
     """Dataset map function that parses a TFRecord example and select fields."""
     # https://stackoverflow.com/questions/41951433/tensorflow-valueerror-shape-must-be-rank-1-but-is-rank-0-for-parseexample-pa
     parsed_features = tf.io.parse_example([raw_proto], self.features)
@@ -768,7 +848,7 @@ class TFExampleData(BrainData):
     return in_data, in2_data, out_data, attended_data
 
 
-def discover_feature_shapes(tfrecord_file_name):
+def discover_feature_shapes(tfrecord_file_name: str):
   """Reads a TFRecord file, parse one TFExample, and return the structure.
 
   Args:
@@ -811,7 +891,7 @@ def discover_feature_shapes(tfrecord_file_name):
   return shapes
 
 
-def count_tfrecords(tfrecord_file_name):
+def count_tfrecords(tfrecord_file_name: str) -> Tuple[int, bool]:
   """Counts and validates the number of TFRecords in an input file.
 
   Args:
@@ -840,26 +920,27 @@ def count_tfrecords(tfrecord_file_name):
   return record_count, False
 
 
-def create_brain_dataset(data_type, in_fields, out_field, frame_rate,
-                         pre_context=0,
-                         post_context=0,
-                         in2_fields=None,
-                         in2_pre_context=0,
-                         in2_post_context=0,
-                         attended_field=None,
-                         initial_batch_size=1000,
-                         final_batch_size=1000,
-                         repeat_count=1,
-                         shuffle_buffer_size=1000,
-                         data_dir=None,
-                         data_pattern='',
-                         train_file_pattern=None,
-                         validate_file_pattern=None,
-                         test_file_pattern=None):
+def create_brain_dataset(data_type: str, in_fields: str, out_field: str,
+                         frame_rate: float,
+                         pre_context: int = 0,
+                         post_context: int = 0,
+                         in2_fields: Optional[str] = None,
+                         in2_pre_context: int = 0,
+                         in2_post_context: int = 0,
+                         attended_field: Optional[str] = None,
+                         initial_batch_size: int = 1000,
+                         final_batch_size: int = 1000,
+                         repeat_count: int = 1,
+                         shuffle_buffer_size: int = 1000,
+                         data_dir: Optional[str] = None,
+                         data_pattern: str = '',
+                         train_file_pattern: Optional[str] = None,
+                         validate_file_pattern: Optional[str] = None,
+                         test_file_pattern: Optional[str] = None) -> BrainData:
   """Creates any of the brain datasets that we know about.
 
   Args:
-    data_type: Desired type of dataset.
+    data_type: Desired type of dataset (either tfrecord or test).
     in_fields: A list of fields from a dataset used as input to regression.
     out_field: A single field name to predict (also dataset field).
     frame_rate: Sample rate of the data, needed for preprocessing filters.

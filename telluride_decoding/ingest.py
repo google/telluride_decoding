@@ -73,9 +73,9 @@ import collections
 import os
 import pickle
 import tempfile
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from absl import app
-from absl import flags
 from absl import logging
 
 import numpy as np
@@ -83,10 +83,7 @@ import pyedflib
 import scipy.io.wavfile
 import scipy.signal
 import scipy.stats
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
-
-FLAGS = flags.FLAGS
+import tensorflow as tf
 
 
 class BrainSignal(object):
@@ -101,7 +98,8 @@ class BrainSignal(object):
   TODO: change name data_type to data_source
   """
 
-  def __init__(self, name, signal, sample_rate, data_type=None):
+  def __init__(self, name: str, signal: Union[np.ndarray, List[float]],
+               sample_rate: float, data_type: Optional[str] = None):
     # Signal has size of num_times x num_channels.
     if not isinstance(name, str):
       raise ValueError('name should be a string or unicode.')
@@ -117,16 +115,16 @@ class BrainSignal(object):
     self._data_type = data_type
 
   @property
-  def signal(self):
+  def signal(self) -> np.ndarray:
     """Returns the signals value (a np.ndarray)."""
     return self._signal
 
   @property
-  def data_type(self):
+  def data_type(self) -> str:
     return self._data_type
 
   @property
-  def sr(self):
+  def sr(self) -> float:
     """Return the signal's sample rate."""
     return self._sr
 
@@ -135,7 +133,7 @@ class BrainSignal(object):
     """Return the channel's name."""
     return self._name
 
-  def fix_offset(self, offset_seconds):
+  def fix_offset(self, offset_seconds: float):
     """Fix the offset in a brain signal by removing the first offset-seconds.
 
     Data in an experiment often has the audio and the brain data out of sync,
@@ -163,9 +161,10 @@ class BrainSignal(object):
 # but there should be a big peak at the one-true offset.
 
 
-def find_temporal_offset_via_linear_regression(audio_trigger_times,
-                                               eeg_trigger_times,
-                                               verbose=True):
+def find_temporal_offset_via_linear_regression(
+    audio_trigger_times: np.ndarray,
+    eeg_trigger_times: np.ndarray,
+    verbose: bool = True) -> Tuple[float, int]:
   """Find offset between audio and eeg using linear regression over times.
 
   Given x and y data, find the offset to subtract from the y times to make
@@ -198,8 +197,10 @@ def find_temporal_offset_via_linear_regression(audio_trigger_times,
   return res[1], len(outlier_indices)  # The intercept
 
 
-def find_temporal_offset_via_mode_histogram(audio_triggers, eeg_triggers,
-                                            max_time=0, fs=0):
+def find_temporal_offset_via_mode_histogram(audio_triggers: List[float],
+                                            eeg_triggers: List[float],
+                                            max_time: float = 0,
+                                            fs: float = 0) -> float:
   """Use histogram of temporal event differences to compute offset.
 
   An alternative, from Alain, is to look at the time difference between every
@@ -234,7 +235,8 @@ def find_temporal_offset_via_mode_histogram(audio_triggers, eeg_triggers,
   return mode
 
 
-def remove_close_times(times, min_time=0.06):
+def remove_close_times(times: List[float],
+                       min_time: float = 0.06) -> List[float]:
   """Remove close trigger times to get trigger onsets.
 
   Remove trigger times that are within some specified interval of the
@@ -279,7 +281,7 @@ class BrainTrial(object):
      for this trial into a TFRecord file.
   """
 
-  def __init__(self, trial_name):
+  def __init__(self, trial_name: str):
     self._sound_data = None
     self._sound_fs = None
     self._brain_data = collections.OrderedDict()   # Keyed by signal name
@@ -289,20 +291,36 @@ class BrainTrial(object):
     self._trial_name = trial_name
 
   @property
-  def model_features(self):
+  def model_features(self) -> Dict[str, np.ndarray]:
     return self._model_features
 
   @property
-  def brain_data(self):
+  def brain_data(self) -> Dict[str, np.ndarray]:
     return self._brain_data
 
   @model_features.setter
-  def model_features(self, new_dict):
+  def model_features(self, new_dict: Dict[str, np.ndarray]):
     if not isinstance(new_dict, dict):
       raise TypeError('audio features for trial must be in the form of a dict.')
     self._model_features = new_dict
 
-  def add_model_feature(self, name, data):
+  @property
+  def sound_fs(self) -> float:
+    return self._sound_fs
+
+  @property
+  def sound_data(self) -> np.ndarray:
+    return self._sound_data
+
+  @sound_data.setter
+  def sound_data(self, new_sound: np.ndarray):
+    self._sound_data = new_sound
+
+  @property
+  def filename(self) -> str:
+    return 'dummy_brain_trial'
+
+  def add_model_feature(self, name: str, data: Union[List[float], np.ndarray]):
     """Adds a feature (np array) to the dictionary of features for this trial.
 
     Args:
@@ -316,10 +334,10 @@ class BrainTrial(object):
     self._model_features[name] = np.asarray(data)
 
   @property
-  def trial_name(self):
+  def trial_name(self) -> str:
     return self._trial_name
 
-  def summary_string(self):
+  def summary_string(self) -> str:
     """Construct string to summarize one trial's data."""
     summary = '%d EEG channels' % len(self._brain_data)
     if self._brain_data:
@@ -338,7 +356,10 @@ class BrainTrial(object):
     summary += '.'
     return summary
 
-  def load_sound(self, sound_data, sound_fs=None, sound_dir=None):
+  def load_sound(self,
+                 sound_data: Union[str, List[float], np.ndarray],
+                 sound_fs: Optional[float] = None,
+                 sound_dir: Optional[str] = None):
     """Load the sound file for this trial.
 
     Args:
@@ -352,20 +373,27 @@ class BrainTrial(object):
       sound_filename = os.path.join(sound_dir, sound_data)
       if not sound_filename.endswith('.wav'):
         sound_filename += '.wav'
-      with tf.io.gfile.GFile(sound_filename, 'rb') as fp:
-        [self._sound_fs, self._sound_data] = scipy.io.wavfile.read(fp)
-        num_frames = self._sound_data.shape[0]
-        self._sound_data = self._sound_data.reshape(num_frames, -1)
-        self._sound_data = self._sound_data.astype(np.float32) / 32767.0
+      try:
+        with LocalCopy(sound_filename) as fp:
+          [self._sound_fs, self._sound_data] = scipy.io.wavfile.read(fp)
+          num_frames = self._sound_data.shape[0]
+          self._sound_data = self._sound_data.reshape(num_frames, -1)
+          self._sound_data = self._sound_data.astype(np.float32) / 32767.0
+      except FileNotFoundError:
+        raise ValueError(
+            f'Can not open {sound_filename} to read audio waveform.')
+      except:
+        print(f'Can not read sound data from {sound_filename}')
+        raise
     else:
       # If sound_data is not a filename, it must be convertible to an ndarray.
       sound_data = np.asarray(sound_data)
-      if sound_fs <= 0:
+      if sound_fs <= 0:  # pytype: disable=unsupported-operands
         raise ValueError('sound sample rate must be greater than 0.')
       self._sound_data = sound_data.reshape(sound_data.shape[0], -1)
       self._sound_fs = sound_fs
 
-  def load_brain_data(self, eeg_dir, brain_data):
+  def load_brain_data(self, eeg_dir: str, brain_data: 'BrainDataFile'):
     """Load the brain_data from one file.
 
     Note: if there are more than one brain recording of each sound file, then
@@ -395,7 +423,7 @@ class BrainTrial(object):
       self._brain_data[name] = BrainSignal(name, signal, sr,
                                            data_type=data_type)
 
-  def iterate_brain_channels(self, data_type=None):
+  def iterate_brain_channels(self, data_type: Optional[str] = None):
     for a_brain_signal in self._brain_data.values():
       if not isinstance(a_brain_signal, BrainSignal):
         raise TypeError('BrainData signal must be a BrainSignal, not a %s.' %
@@ -403,7 +431,8 @@ class BrainTrial(object):
       if data_type is None or a_brain_signal.data_type == data_type:
         yield a_brain_signal
 
-  def adjust_data_sizes(self, data_dict):
+  def adjust_data_sizes(
+      self, data_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
     """Adjust data sizes in all the dicts to have the same number of frames.
 
     This is needed because the different kinds of data (eeg, intensity, etc)
@@ -437,7 +466,8 @@ class BrainTrial(object):
         data_dict[k] = data_dict[k][0:min_size, :]
     return data_dict
 
-  def find_audio_trigger_times(self, channel_with_trigger=1):
+  def find_audio_trigger_times(
+      self, channel_with_trigger: int = 1) -> List[int]:
     """Find the locations of leading edges of a pulse that indicate a trigger.
 
     Given a stereo audio signal, with non-zero values at the trigger
@@ -466,7 +496,9 @@ class BrainTrial(object):
   # EDF file. Magic constants provided by NATUS to fix their code and transform
   # their EDF files into normal byte codes.
   #   TRIGINFIX = INT(-0.0063606452364314*( TRIGINOLD -5151600)+(-32768) +0.5)
-  def find_eeg_trigger_times(self, channel_name='TRIG'):
+  def find_eeg_trigger_times(
+      self,
+      channel_name: str = 'TRIG') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Find the times of the EEG trigger events.
 
     Look for the trigger channel, and detect the changes that occur when an
@@ -498,7 +530,8 @@ class BrainTrial(object):
     trigger_times = trigger_times / float(self._brain_data[channel_name].sr)
     return trigger_times, trigger_signal, trigger_signal2
 
-  def find_cognionix_trigger_time(self, channel_name='EXP32', level=8000):
+  def find_cognionix_trigger_time(self, channel_name: str = 'EXP32',
+                                  level: float = 8000) -> Optional[float]:
     if channel_name not in self._brain_data:
       raise ValueError('channel name %s not in brain data %s.' %
                        (channel_name, self._brain_data))
@@ -507,7 +540,7 @@ class BrainTrial(object):
       return times[0//float(self._brain_data[channel_name].sr)]
     return None
 
-  def fix_eeg_offset(self, offset_seconds):
+  def fix_eeg_offset(self, offset_seconds: float):
     """Find the offset between audio and EEG using robust linear regression.
 
     Remove the initial parts of the EEG signal that is caused because the EEG
@@ -527,7 +560,7 @@ class BrainTrial(object):
     for signal_name in self._brain_data:
       self._brain_data[signal_name].fix_offset(offset_seconds)
 
-  def assemble_brain_data(self, eeg_channel_names):
+  def assemble_brain_data(self, eeg_channel_names: Union[List[str], str]):
     """Assemble the channels of EEG data for one trial.
 
     Given the trial_data dictionary, extract the eeg data we care about for a
@@ -580,8 +613,8 @@ class BrainTrial(object):
       raise ValueError('Width mismatch: %d vs %d' % (c, frame_width))
     self._model_features['eeg'] = eeg_data
 
-  def write_data_as_tfrecords(self, tf_dir,
-                              reverse_data_for_test=False):
+  def write_data_as_tfrecords(self, tf_dir: str,
+                              reverse_data_for_test: bool = False):
     """Given the features we care about, and optionally z-score the data.
 
     Write it all out as TFRecord files.
@@ -628,20 +661,30 @@ class BrainDataFile(object):
   Query this class to get the signal names and values.
   """
 
-  def __init__(self, data_filename, data_type=None):
+  def __init__(self, data_filename: str, data_type: Optional[str] = None):
     self._data_filename = data_filename
     self._data_type = data_type
 
   @property
-  def filename(self):
+  def filename(self) -> str:
     return self._data_filename
 
   @property
-  def data_type(self):
+  def data_type(self) -> str:
     return self._data_type
 
-  def __str__(self):
+  def __str__(self) -> str:
     return type(self).__name__ + '(\'' + self._data_filename + '\')'
+
+  @property
+  def signal_names(self) -> List[str]:
+    raise NotImplementedError
+
+  def signal_values(self, name: str) -> Optional[np.ndarray]:
+    raise NotImplementedError
+
+  def signal_fs(self, _) -> float:
+    raise NotImplementedError
 
   def load_all_data(self, _):
     pass
@@ -655,7 +698,8 @@ class MemoryBrainDataFile(BrainDataFile):
   data formats.
   """
 
-  def __init__(self, trial_dict, sr=64, data_type=None, name='in_memory'):
+  def __init__(self, trial_dict, sr=64, data_type: Optional[str] = None,
+               name: str = 'in_memory'):
     if not isinstance(trial_dict, dict):
       raise TypeError('Input must be a dictionary of channel names and arrays.')
     if sr <= 0.0:
@@ -671,17 +715,17 @@ class MemoryBrainDataFile(BrainDataFile):
                          % (channel_name, str(channel_data.shape)))
     self._my_data_dict = trial_dict
     self._my_sr = sr
-    BrainDataFile.__init__(self, name, data_type=type)
+    BrainDataFile.__init__(self, name, data_type=data_type)
 
   @property
-  def signal_names(self):
+  def signal_names(self) -> List[str]:
     return list(self._my_data_dict.keys())
 
-  def signal_values(self, name):
+  def signal_values(self, name: str) -> Optional[np.ndarray]:
     if name in self._my_data_dict:
       return self._my_data_dict[name]
 
-  def signal_fs(self, _):
+  def signal_fs(self, _) -> float:
     return self._my_sr
 
 
@@ -694,7 +738,7 @@ class LocalCopy(object):
   passed to EDF or Matlab reading code.
   """
 
-  def __init__(self, remote_filename):
+  def __init__(self, remote_filename: str):
     self._remote_filename = remote_filename
 
   def __enter__(self):
@@ -708,7 +752,7 @@ class LocalCopy(object):
     self._fp.close()
 
 
-def parse_edf_file(sample_edf_file):
+def parse_edf_file(sample_edf_file: str) -> Dict[str, Any]:
   """Parse the content of an EDF file, and return a dict with relevant parts.
 
   Args:
@@ -720,7 +764,7 @@ def parse_edf_file(sample_edf_file):
   with pyedflib.EdfReader(sample_edf_file) as f:
     if not f:
       logging.error('Can not read EDF data from %s', sample_edf_file)
-      return None
+      return None  # pytype: disable=bad-return-type  # gen-stub-imports
     n = f.signals_in_file
     signal_labels = f.getSignalLabels()
     fs_list = f.getSampleFrequencies()
@@ -740,12 +784,12 @@ def parse_edf_file(sample_edf_file):
 class EdfBrainDataFile(BrainDataFile):
   """Code to read the EDF brain-signal file format."""
 
-  def __init__(self, filename, data_type=None, **kwds):
+  def __init__(self, filename, data_type: Optional[str] = None, **kwds):
     self._edf_dict = {}
     super(EdfBrainDataFile, self).__init__(filename, data_type=data_type,
                                            **kwds)
 
-  def load_all_data(self, data_dir):
+  def load_all_data(self, data_dir: str):
     if not tf.io.gfile.exists(data_dir):
       raise IOError('Data_dir does not exist:', data_dir)
     data_filename = os.path.join(data_dir, self._data_filename)
@@ -759,22 +803,22 @@ class EdfBrainDataFile(BrainDataFile):
       self._edf_dict = parse_edf_file(local_filename)
 
   @property
-  def signal_names(self):
+  def signal_names(self) -> List[str]:
     return self._edf_dict['labels']
 
-  def signal_values(self, name):
+  def signal_values(self, name: str) -> np.ndarray:
     if not isinstance(name, str):
       raise ValueError('Must search for values with a string name.')
     channel_number = self.find_channel_index(name)
     return self._edf_dict['signals'][channel_number]
 
-  def signal_fs(self, name):
+  def signal_fs(self, name: str) -> float:
     if not isinstance(name, str):
       raise TypeError('Signal\'s name must be a string (or unicode).')
     channel_number = self.find_channel_index(name)
     return self._edf_dict['sample_rates'][channel_number]
 
-  def find_channel_index(self, desired_label='TRIG'):
+  def find_channel_index(self, desired_label: str = 'TRIG') -> Optional[int]:
     """Look through the EDF channel names for the desired channel index.
 
     Args:
@@ -792,6 +836,8 @@ class EdfBrainDataFile(BrainDataFile):
 
 
 ###################  BrainExperiment for everything  ###########################
+BrainTrialDict = Dict[str,
+                      List[Union[str, Dict[str, Any], BrainDataFile]]]
 
 
 class BrainExperiment(object):
@@ -809,12 +855,16 @@ class BrainExperiment(object):
   """
 
   @staticmethod
-  def delete_suffix(filename, suffix):
+  def delete_suffix(filename: str, suffix: str) -> str:
     if filename.endswith(suffix):
       filename = filename.replace(suffix, '')
     return filename
 
-  def __init__(self, trial_dict, sound_dir, eeg_dir, frame_rate=64):
+  def __init__(self,
+               trial_dict: BrainTrialDict,
+               sound_dir: str,
+               eeg_dir: str,
+               frame_rate: float = 64):
     if not isinstance(trial_dict, dict):
       raise TypeError('trial is specified with a dictionary of data not %s' %
                       trial_dict)
@@ -837,12 +887,14 @@ class BrainExperiment(object):
     self._feature_mean = {}
     self._feature_std = {}
 
-  def trial_data(self, key):
+  def trial_data(self, key: str) -> Optional[BrainTrial]:
     if key in self._data_dict:
       return self._data_dict[key]
     return None
 
-  def add_sound_data(self, sound_dict, trial):
+  def add_sound_data(self,
+                     sound_dict: Dict[str, Union[float, np.ndarray]],
+                     trial: BrainTrial):
     """Add the sound data to this trial from a sound_dict.
 
     Args:
@@ -859,7 +911,7 @@ class BrainExperiment(object):
                       type(trial))
     if 'audio_data' in sound_dict and 'audio_sr' in sound_dict:
       logging.info('Adding sound data of size %s and %gHz to trial %s',
-                   sound_dict['audio_data'].shape, sound_dict['audio_sr'],
+                   len(sound_dict['audio_data']), sound_dict['audio_sr'],
                    trial.trial_name)
       trial.load_sound(sound_dict['audio_data'], sound_dict['audio_sr'])
       del sound_dict['audio_data']
@@ -871,7 +923,7 @@ class BrainExperiment(object):
     for trial in self._data_dict.values():
       yield trial
 
-  def load_all_data(self, sound_dir, eeg_dir, verbose=False):
+  def load_all_data(self, sound_dir: str, eeg_dir: str, verbose: bool = False):
     """Load all the sound and EEG data for this experiment.
 
     Args:
@@ -917,6 +969,9 @@ class BrainExperiment(object):
       IOError: if sound file doesn't exist.
     """
     for (trial_name, trial_data) in self._trial_dict.items():
+      if not isinstance(self._trial_dict, BrainTrialDict):
+        raise TypeError('Expected a BrainTrailDict for %s, but got a %s' %
+                        (trial_name, type(BrainTrialDict)))
       sound_loc = os.path.join(self._sound_dir, trial_name + '.wav')
       if not tf.io.gfile.exists(sound_loc):
         raise IOError('Can not find %s in %s' % (trial_name, self._sound_dir))
@@ -925,12 +980,13 @@ class BrainExperiment(object):
       else:
         trial_list = [trial_data,]
       for data in trial_list:
-        e = data.filename
-        eeg_loc = os.path.join(self._eeg_dir, e + '.edf')
-        if not tf.io.gfile.exists(eeg_loc):
-          raise IOError('Can not find %s in %s' % (e+'.edf', self._eeg_dir))
+        if isinstance(data, BrainTrial):
+          e = data.filename
+          eeg_loc = os.path.join(self._eeg_dir, e + '.edf')
+          if not tf.io.gfile.exists(eeg_loc):
+            raise IOError('Can not find %s in %s' % (e+'.edf', self._eeg_dir))
 
-  def summary(self):
+  def summary(self) -> str:
     summary = 'Experiment summary:\n'
     summary = summary + ('  Reading sound from: %s\n' % self._sound_dir)
     summary = summary + ('  Reading EEG data from: %s\n' % self._eeg_dir)
@@ -940,7 +996,7 @@ class BrainExperiment(object):
                                                    trial_data.summary_string()))
     return summary
 
-  def get_all_feature_data(self, feature_name):
+  def get_all_feature_data(self, feature_name: str) -> List[np.ndarray]:
     features = []
     for trial_data in self._data_dict.values():
       model_features = trial_data.model_features
@@ -948,7 +1004,17 @@ class BrainExperiment(object):
         features.append(model_features[feature_name])
     return features
 
-  def zscore_all_features(self, feature_name, mean, std):
+  def zscore_all_features(self,
+                          feature_name: str,
+                          mean: Union[float, np.ndarray],
+                          std: Union[float, np.ndarray]):
+    """Remove mean and normalize variance of all features.
+
+    Args:
+      feature_name: Feature to normalize
+      mean: Current mean of the data to remove
+      std: Standard deviation of the data.
+    """
     if abs(std) == 1e-10:  # Don't bother scaling if standard deviation is zero
       std = 1.0
     for trial_data in self._data_dict.values():
@@ -979,7 +1045,7 @@ class BrainExperiment(object):
       self._feature_std[data_type] = std
       self.zscore_all_features(data_type, mean, std)
 
-  def save_zscore_data(self, filename):
+  def save_zscore_data(self, filename: str):
     """Save the experiments's mean and standard deviation used for z-scoring.
 
     This is needed so we can adjust the data we use for inference. Note: The
@@ -1010,7 +1076,9 @@ class BrainExperiment(object):
     return all_files
 
 
-def find_mean_std(data_list, columnwise=False):
+def find_mean_std(data_list: List[np.ndarray],
+                  columnwise: bool = False) -> Tuple[Union[np.ndarray, float],
+                                                     Union[np.ndarray, float]]:
   """Given a list of np arrays, find their joint mean and standard deviation.
 
   Args:
@@ -1041,8 +1109,12 @@ def find_mean_std(data_list, columnwise=False):
   return data_mean, data_std
 
 
-def normalize_data(a, data_mean, data_std):
+def normalize_data(a: np.ndarray,
+                   data_mean: Union[float, np.ndarray],
+                   data_std: Union[float, np.ndarray]) -> np.ndarray:
   """Remove the mean from an np array and normalize by the standard deviation.
+
+  Make sure we don't divide by zero, which might happen with artificial data.
 
   Args:
     a: the array of data
@@ -1052,13 +1124,16 @@ def normalize_data(a, data_mean, data_std):
   Returns:
     A new array, with the mean subtracted and divided by the data_std.
   """
-  return (a - data_mean) / data_std
+  centered = a - data_mean
+  if np.max(np.abs(data_std)) > 0.0:
+    return centered / data_std
+  return centered
 
 
 #################   Write out the data in TFRecords format  ####################
 
 
-def convert_data_to_tfrecords(filename, data_dict):
+def convert_data_to_tfrecords(filename: str, data_dict: Dict[str, np.ndarray]):
   """Convert a dictionary of audio and brain signals into TFRecord format.
 
   The dictionary translates between feature type, and points to an array per
@@ -1117,7 +1192,8 @@ def convert_data_to_tfrecords(filename, data_dict):
       writer.write(example.SerializeToString())
 
 
-def discover_feature_shapes(tfrecord_file_name):
+def discover_feature_shapes(
+    tfrecord_file_name: str) -> Dict[str, tf.io.FixedLenFeature]:
   """Read a TFRecord file, parse one TFExample, and return the structure.
 
   Args:
@@ -1163,7 +1239,7 @@ def discover_feature_shapes(tfrecord_file_name):
   return shapes
 
 
-def count_tfrecords(tfrecord_file_name):
+def count_tfrecords(tfrecord_file_name: str) -> Tuple[int, bool]:
   """Count the number of records in a TFRecord file.
 
   Args:
@@ -1192,7 +1268,9 @@ def count_tfrecords(tfrecord_file_name):
   return record_count, False
 
 
-def read_tfrecords(tfrecord_file_name, start_frame=0, frame_count=512):
+def read_tfrecords(tfrecord_file_name: str,
+                   start_frame: int = 0,
+                   frame_count: int = 512) -> Dict[str, np.ndarray]:
   """Read in some of the TFRecord data and return the data in np arrays.
 
   Args:
@@ -1240,7 +1318,12 @@ def read_tfrecords(tfrecord_file_name, start_frame=0, frame_count=512):
   return records
 
 
-def transform_tfrecords(input_file, new_tf_dir, trial_name, transforms):
+def transform_tfrecords(
+    input_file: str,
+    new_tf_dir: str,
+    trial_name: str,
+    transforms: List[Callable[[Dict[str, np.ndarray],],
+                              Tuple[str, np.ndarray]]]) -> str:
   """Transforms a TFRecord file by adding more computed fields.
 
   Args:
@@ -1276,5 +1359,4 @@ def main(argv):
     raise app.UsageError('Too many command-line arguments.')
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   app.run(main)

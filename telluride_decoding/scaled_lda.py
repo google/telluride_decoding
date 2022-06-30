@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ Scaled LDA maps data from the two classes to 0 and 1, along the best dimension.
 """
 
 import collections
+from typing import Any, List, Union
+
 from absl import logging
 import numpy as np
 
@@ -52,19 +54,19 @@ class LinearDiscriminantAnalysis(object):
     self._w = None
 
   @property
-  def mean_vectors(self):
+  def mean_vectors(self) -> Any:  # Really should be List[np.ndarray]:
     return self._mean_vectors
 
   @property
-  def coef_array(self):
+  def coef_array(self) -> np.ndarray:
     return self._w
 
   @property
-  def labels(self):
+  def labels(self) -> Union[List[Any], np.ndarray]:
     return self._labels
 
   @property
-  def model_parameters(self):
+  def model_parameters(self) -> LdaParamsTuple:
     """Returns the model parameters needed to implement this model.
 
     Returns:
@@ -75,7 +77,7 @@ class LinearDiscriminantAnalysis(object):
         None, None)
 
   @model_parameters.setter
-  def model_parameters(self, values):
+  def model_parameters(self, values: LdaParamsTuple):
     """Sets the model parameters based on saved values.
 
     Args:
@@ -84,7 +86,7 @@ class LinearDiscriminantAnalysis(object):
     self._set_parameters(values)
 
   # https://stackoverflow.com/questions/42763283/access-superclass-property-setter-in-subclass
-  def _set_parameters(self, values):
+  def _set_parameters(self, values: LdaParamsTuple):
     if values.w_real is not None:
       self._w = np.array(values.w_real) + 1j * np.array(values.w_imag)
     else:
@@ -93,7 +95,9 @@ class LinearDiscriminantAnalysis(object):
     self._mean_vectors = np.array(values.mean_vectors)
 
   @classmethod
-  def from_fitted_data(cls, x, y):
+  def from_fitted_data(cls,
+                       x: np.ndarray,
+                       y: np.ndarray) -> 'LinearDiscriminantAnalysis':
     """Creates an object and fits it to some data.
 
     The calculated rotation matrix (w) is stored for later use.
@@ -109,7 +113,7 @@ class LinearDiscriminantAnalysis(object):
     obj.fit(x, y)
     return obj
 
-  def expand_dims(self, data):
+  def expand_dims(self, data: np.ndarray):
     """Make sure the data is two dimensional.
 
     Args:
@@ -122,7 +126,9 @@ class LinearDiscriminantAnalysis(object):
       data = np.reshape(data, (-1, 1))
     return data
 
-  def _compute_in_class_scatter_matrix(self, x, y):
+  def _compute_in_class_scatter_matrix(self,
+                                       x: np.ndarray,
+                                       y: np.ndarray) -> np.ndarray:
     """Computes the in-class scatter matrix for the x data, given labels in y.
 
     Args:
@@ -133,7 +139,7 @@ class LinearDiscriminantAnalysis(object):
       An np.ndarray of size num_dims x num_dims with the covariances.
     """
     num_dims = x.shape[1]
-    scatter_within = 0
+    scatter_within = np.zeros((num_dims, num_dims))
     for class_index, mean_vector in enumerate(self._mean_vectors):
       for row in x[y == self._labels[class_index]]:
         row = row.reshape(num_dims, 1)
@@ -141,7 +147,9 @@ class LinearDiscriminantAnalysis(object):
         scatter_within += (row - mean_vector).dot((row - mean_vector).T)
     return scatter_within
 
-  def _compute_between_class_scatter_matrix(self, x, y):
+  def _compute_between_class_scatter_matrix(self,
+                                            x: np.ndarray,
+                                            y: np.ndarray) -> np.ndarray:
     """Computes the between class scatter matrix for the x data.
 
     Args:
@@ -156,7 +164,7 @@ class LinearDiscriminantAnalysis(object):
     # Compute the between-class scatter matrix.
     overall_mean = np.mean(x, axis=0)
 
-    scatter_between = 0
+    scatter_between = np.zeros((num_dims, num_dims))
     for i, mean_vector in enumerate(self._mean_vectors):
       n = x[y == self._labels[i], :].shape[0]
       mean_vector = mean_vector.reshape(num_dims, 1)   # make column vector
@@ -165,7 +173,7 @@ class LinearDiscriminantAnalysis(object):
           (mean_vector - overall_mean).T)
     return scatter_between
 
-  def fit(self, x, y):
+  def fit(self, x: np.ndarray, y: np.ndarray):
     """Creates a model that best fits the data.
 
     The calculated rotation matrix (w) is stored for later use.
@@ -203,7 +211,7 @@ class LinearDiscriminantAnalysis(object):
     else:
       self._w = np.array([[1,],])
 
-  def transform(self, x):
+  def transform(self, x: np.ndarray) -> np.ndarray:
     """Transforms some data based on the learned LDA model.
 
     Args:
@@ -221,11 +229,11 @@ class LinearDiscriminantAnalysis(object):
                       (x.shape, self._w.shape))
     return np.real(x.dot(self._w))
 
-  def fit_transform(self, x, y):
+  def fit_transform(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     self.fit(x, y)
     return self.transform(x)
 
-  def explained_variance_ratio(self):
+  def explained_variance_ratio(self) -> np.ndarray:
     """Calculates a vector describing the explained variance for each dimension.
 
     Returns:
@@ -252,7 +260,7 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     super(ScaledLinearDiscriminantAnalysis, self).__init__()
 
   @property
-  def model_parameters(self):
+  def model_parameters(self) -> LdaParamsTuple:
     """Returns the model parameters needed to implement this model.
 
     Returns:
@@ -264,7 +272,7 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     return values
 
   @model_parameters.setter
-  def model_parameters(self, values):
+  def model_parameters(self, values: LdaParamsTuple):
     """Sets the model parameters based on saved values.
 
     Args:
@@ -272,7 +280,7 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     """
     self._set_parameters(values)
 
-  def _set_parameters(self, values):
+  def _set_parameters(self, values: LdaParamsTuple):
     logging.info('Scaled_LDA Parameter Values: %s', values)
     values = LdaParamsTuple(*values)
 
@@ -280,7 +288,11 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     self._slope = values.slope
     self._intercept = values.intercept
 
-  def fit(self, x, y, y0=0, y1=1):
+  def fit(self,
+          x: np.ndarray,
+          y: np.ndarray,
+          y0: Union[float, np.ndarray] = 0,
+          y1: Union[float, np.ndarray] = 1):
     """Fits the transformed data to the given labels.
 
     Args:
@@ -304,7 +316,8 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
     x1 = self.transform(np.reshape(self.mean_vectors[1], (1, -1)))[0, 0]
     if x0 == x1:
       # Ooops, probably a programming error.  Two classes have the same mean.
-      raise ValueError('X0 and X1 are identical (%g and %g)' % (x0, x1))
+      raise ValueError('X0 and X1 in Scaled LDA are identical (%g and %g)' %
+                       (x0, x1))
     self._slope = (y0 - y1) / (x0 - x1)
     self._intercept = y0 - self._slope*x0
     logging.info('Scaled LDA slope and intercept are: %g, %g',
@@ -328,7 +341,7 @@ class ScaledLinearDiscriminantAnalysis(LinearDiscriminantAnalysis):
                         np.ones(class0.shape[0])*1))
     self.fit(x, y)
 
-  def transform(self, x):
+  def transform(self, x: np.ndarray) -> np.ndarray:
     """Transforms the input data, applying the LDA transform and the scaling.
 
     Args:

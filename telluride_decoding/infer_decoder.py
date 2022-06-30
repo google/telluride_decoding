@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,6 +59,8 @@ the train method.
 import collections
 import json
 import os
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+
 from absl import logging
 
 import numpy as np
@@ -67,14 +69,13 @@ from telluride_decoding import brain_data
 from telluride_decoding import result_store
 from telluride_decoding import scaled_lda
 
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf
 
 
 class NumpyEncoder(json.JSONEncoder):
   """Encoder for allowing serialization of numpy arrays."""
 
-  def default(self, obj):
+  def default(self, obj: Any):
     if isinstance(obj, np.ndarray):
       comp_list = obj.tolist()
       if np.iscomplexobj(obj):
@@ -117,7 +118,7 @@ class Decoder(object):
       testing.  Usually this parameter will be None, and it will be loaded via
       the load_model method.
     decoding_model_params: A dictionary that describes the parameters used to
-      build the model.
+      build the inference model (correlation means and lda parameters).
     model_inputs: A dictionary keyed by input_name with data sizes (as a list).
     model_output: A list indicating the output shape.
     model_params: A list of model parameters to be passed to real-time code.
@@ -126,7 +127,10 @@ class Decoder(object):
   """
   # TODO: Change all params using dictionary to use namedtuple
 
-  def __init__(self, decoding_model=None, reduction='mean-squared'):
+  def __init__(self,
+               decoding_model: Optional[Callable[[Dict[str, np.ndarray]],
+                                                 np.ndarray]] = None,
+               reduction: str = 'mean-squared'):
     if decoding_model is not None and not callable(decoding_model):
       raise TypeError('Must supply a callable model when initializing a '
                       'Decoder, not a %s.' % type(decoding_model))
@@ -142,16 +146,17 @@ class Decoder(object):
     self.reset_correlation_statistics()
 
   @property
-  def decoding_model(self):
+  def decoding_model(self) -> Optional[Callable[[Dict[str, np.ndarray]],
+                                                np.ndarray]]:
     return self._decoding_model
 
   @property
-  def decoding_model_params(self):
+  def decoding_model_params(self) -> Dict[str, Any]:
     """The parameters of the models, in a named tuple."""
     return self._decoding_model_params
 
   @decoding_model_params.setter
-  def decoding_model_params(self, values):
+  def decoding_model_params(self, values: Dict[str, Any]):
     """Sets the model parameters based on saved values.
 
     Args:
@@ -160,12 +165,12 @@ class Decoder(object):
     self._decoding_model_params = values
 
   @property
-  def correlation_params(self):
+  def correlation_params(self) -> CorrelationParamsTuple:
     return CorrelationParamsTuple(self._count, self._sum_x, self._sum_y,
                                   self._sum_x2, self._sum_y2, self._mean_x,
                                   self._mean_y, self._power)
 
-  def _set_correlation_params(self, values):
+  def _set_correlation_params(self, values: List[Any]):
     values = CorrelationParamsTuple(*values)
     self._count = values.count
     self._sum_x = values.sum_x
@@ -188,7 +193,7 @@ class Decoder(object):
     self._lda.model_parameters = values
 
   @property
-  def model_params(self):
+  def model_params(self) -> ModelParamsTuple:
     """Returns the model parameters needed to implement this model.
 
     Generally specialized for each type of decoder.
@@ -200,7 +205,7 @@ class Decoder(object):
     return model_params
 
   @model_params.setter
-  def model_params(self, values):
+  def model_params(self, values: ModelParamsTuple):
     """Sets the model parameters based on saved values.
 
     Args:
@@ -208,17 +213,17 @@ class Decoder(object):
     """
     self._set_parameters(values)
 
-  def _set_parameters(self, values):
+  def _set_parameters(self, values: ModelParamsTuple):
     self._set_correlation_params(values.correlation_params)
     self._set_lda_params(values.lda_params)
 
   @property
-  def model_inputs(self):
+  def model_inputs(self) -> Dict[str, List[int]]:
     """A dictionary of input keys, with a size (list) for each input."""
     return self._model_inputs
 
   @property
-  def model_output(self):
+  def model_output(self) -> List[int]:
     """A list indicating the output shape."""
     return self._model_output
 
@@ -232,19 +237,21 @@ class Decoder(object):
     self._mean_y = 0.0
     self._power = 1.0
 
-  def save_parameters(self, param_filename):
+  def save_parameters(self, param_filename: str):
     params = self.model_params
     with tf.io.gfile.GFile(param_filename, 'w') as f:
       json.dump(params._asdict(), f, cls=NumpyEncoder)
 
-  def restore_parameters(self, param_filename):
+  def restore_parameters(self, param_filename: str):
     with tf.io.gfile.GFile(param_filename, 'r') as f:
       loaded = json.load(f)
     self.model_params = ModelParamsTuple(**loaded)
 
   def load_decoding_model(self,
-                          saved_model_file,
-                          object_dict):
+                          saved_model_file: str,
+                          object_dict: Dict[str, Callable[[Dict[str,
+                                                                np.ndarray]],
+                                                          np.ndarray]]):
     """Loads a saved Keras mode, linking in our metrics and loss definitions.
 
     Use the object_dict to tell the new model which code implements the custom
@@ -271,12 +278,14 @@ class Decoder(object):
 
     self._decoding_model_params = json.loads(
         self._decoding_model.telluride_metadata.numpy())
+    # Note this information about the shapes of the inputs and outputs are
+    # meta data stored with the model.
     self._model_inputs = json.loads(
         self._decoding_model.telluride_inputs.numpy())
     self._model_output = json.loads(
         self._decoding_model.telluride_output.numpy())
 
-  def add_data_correlator(self, x, y):
+  def add_data_correlator(self, x: np.ndarray, y: np.ndarray):
     """Adds a batch of data to the correlation calculation.
 
     Updates the online correlation calculation with another batch of data.  Goes
@@ -300,7 +309,7 @@ class Decoder(object):
                            (self._sum_y2 - self._sum_y**2/self._count)) /
                    self._count)
 
-  def compute_correlation(self, x, y):
+  def compute_correlation(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Computes multidimensional correlation and scaling without the final sum.
 
     This just a normalized cross-product.  Add a sum over time (first dimension)
@@ -318,7 +327,10 @@ class Decoder(object):
     return ((x - np.broadcast_to(self._mean_x, x.shape)) *
             (y - np.broadcast_to(self._mean_y, y.shape))/ self._power)
 
-  def train(self, data0, data1, window_size=0):
+  def train(self,
+            data0: tf.data.Dataset,
+            data1: tf.data.Dataset,
+            window_size: int = 0) -> float:
     """Trains the classification aspect of the decoder (means and LDA).
 
     This routine processes all the data once (to get the decoded data, in
@@ -387,7 +399,9 @@ class Decoder(object):
     return self.compute_lda_model(average_data(all_data_0, window_size),
                                   average_data(all_data_1, window_size))
 
-  def decode_one(self, input_dict, ground_truth):
+  def decode_one(self,
+                 input_dict: Dict[str, np.ndarray],
+                 ground_truth: np.ndarray):
     """Makes one prediction from Tensors using the linear decoding_model.
 
     Args:
@@ -399,7 +413,9 @@ class Decoder(object):
     del ground_truth
     raise NotImplementedError('Must be implemented by a subclass.')
 
-  def infer_one(self, input_dict, output):
+  def infer_one(self,
+                input_dict: Dict[str, np.ndarray],
+                output: np.ndarray) -> np.ndarray:
     """Infers the speaker given the current model for one minibatch of data.
 
     This is the entire inference pipeline for online or offline inference.
@@ -438,7 +454,7 @@ class Decoder(object):
     else:
       raise ValueError('Unknown reduction technique: %s.' % self._reduction)
 
-  def test_all(self, exp_data):
+  def test_all(self, exp_data: np.ndarray):
     """Runs a model on both speakers on all the data and returns labels.
 
     For all the data in the exp_data dataset, infers the speaker from the input
@@ -465,7 +481,10 @@ class Decoder(object):
       labels.add_data(input_dict['attended_speaker'])
     return predictions.all_data, labels.all_data
 
-  def test_by_window(self, dataset, window_size):
+  def test_by_window(self,
+                     dataset: tf.data.Dataset,
+                     window_size: int) -> Iterator[Tuple[Optional[np.ndarray],
+                                                         Optional[np.ndarray]]]:
     """Processes a dataset, returning chunked pairs of the correlated signals.
 
     Args:
@@ -473,7 +492,8 @@ class Decoder(object):
       window_size: Size of the analysis window, after decoding
 
     Yields:
-      Two numpy arrays, each with window_size frames, after decoding.
+      Two numpy arrays, each with window_size frames, after decoding. These
+      represent the result of inference and the label.
     """
     storage = result_store.TwoResultStore(window_width=window_size,
                                           window_step=window_size//2)
@@ -483,7 +503,7 @@ class Decoder(object):
       for r1, r2 in storage.next_window():
         yield r1, r2
 
-  def compute_lda_model(self, d1, d2):
+  def compute_lda_model(self, d1: np.ndarray, d2: np.ndarray):
     """Computes linear-discriminant analysis (LDA) model to separate 2 datasets.
 
     This routine finds the best rotation via LDA to separate two classes of data
@@ -529,7 +549,7 @@ class Decoder(object):
       raise TypeError('Input data must be an numpy array, not %s.' % type(d1))
     return self._lda.transform(d1)
 
-  def check_model_and_data(self, actual_dataset):
+  def check_model_and_data(self, actual_dataset: tf.data.Dataset):
     """Checks to see if a dataset is compatible with the current decoding model.
 
     Checks the datasets input and output sizes, and compares them to the model
@@ -563,7 +583,9 @@ class Decoder(object):
 class LinearRegressionDecoder(Decoder):
   """A decoder that connects input to output via linear regression."""
 
-  def decode_one(self, input_dict, ground_truth):
+  def decode_one(self,
+                 input_dict: Dict[str, np.ndarray],
+                 ground_truth: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Makes one prediction from Tensors using the linear decoding_model.
 
     Args:
@@ -586,7 +608,9 @@ class CCADecoder(Decoder):
   """A decoder using CCA to rotate two sets of data to be maximally correlated.
   """
 
-  def decode_one(self, input_dict, ground_truth):
+  def decode_one(self,
+                 input_dict: Dict[str, np.ndarray],
+                 ground_truth: np.ndarray):
     """Makes one prediction using the CCA decoding_model.
 
     Args:
@@ -608,7 +632,9 @@ class CCADecoder(Decoder):
             predictions[:, num_cca_dims:].numpy())
 
 
-def create_decoder(model_tag, reduction='lda', model=None):
+def create_decoder(model_tag: str,
+                   reduction: str = 'lda',
+                   model: tf.keras.Model = None):  # pytype: disable=annotation-type-mismatch  # typed-keras
   """Creates the appropriate type of Decoder model given a model_tag.
 
   Hack alert: This looks for an indication of the model type in the directory
@@ -636,12 +662,16 @@ def create_decoder(model_tag, reduction='lda', model=None):
     print(u'Creating a CCA decoding model....')
     model_object = CCADecoder(model, reduction=reduction)
   else:
-    raise ValueError('Couldn\'t determine model type for %s.' % model_tag)
+    raise ValueError('Couldn\'t determine model type for tag %s.' % model_tag)
   return model_object
 
 
-def create_dataset(tfrecord_file, params, audio_label, frame_rate=100,
-                   mode='test', mixup_batch=False):
+def create_dataset(tfrecord_file: str,
+                   params: Dict[str, Any],
+                   audio_label: str,
+                   frame_rate: int = 100,
+                   mode: str = 'test',
+                   mixup_batch: bool = False) -> tf.data.Dataset:
   """Creates a tensorflow dataset with the test data and a dictionary of params.
 
   Args:
@@ -684,7 +714,7 @@ def create_dataset(tfrecord_file, params, audio_label, frame_rate=100,
 
 
 # From: https://en.m.wikipedia.org/wiki/Sensitivity_index
-def calculate_dprime(d1, d2):
+def calculate_dprime(d1: np.ndarray, d2: np.ndarray) -> np.ndarray:
   """Calculates d' for two sets of data.
 
   It provides the separation between the means of the signal and the noise
@@ -715,7 +745,7 @@ def calculate_dprime(d1, d2):
   return (m2-m1)/np.sqrt((v1+v2)/2.0)
 
 
-def average_data(data, window_size):
+def average_data(data: np.ndarray, window_size: int) -> np.ndarray:
   """Averages data over frames of size window_size to smooth results.
 
   Chunk the data by frames of size window_size (in time) and compute the

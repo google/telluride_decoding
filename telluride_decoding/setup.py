@@ -33,7 +33,7 @@ long_description = long_description.replace(
 
 setuptools.setup(
     name='telluride_decoding',
-    version='2.1.4',   # TF2 and Python 3 (no Py2)
+    version='2.1.5',   # TF2 and Python 3 (no Py2)
     author='Malcolm Slaney',
     author_email='telluride-decoding-maintainers@googlegroups.com',
     description='Telluride Decoding Toolbox',
@@ -48,11 +48,13 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
+        'absl-py',
         'attrs',
         'matplotlib',  # For plotting
         'mock',  # For some of the tests
         'pandas',  # For regression_data to read in results
         'pyedflib',  # For ingesting EEG data in EDF format
+        'scipy',  # For reading wav data
         'tensorflow>=2',
     ],
     include_package_data=True,  # Using the files specified in MANIFEST.in

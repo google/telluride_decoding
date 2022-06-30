@@ -1,4 +1,4 @@
-# Copyright 2019-2020 Google Inc.
+# Copyright 2019-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 TF models and code to predict MEG/EEG signals from their input audio features,
 or vice versa.
 
-This programn does the following:
+This program does the following:
 1) Creates the desired kind of brain model (linear, cca, dnn, etc.)
 2) Trains and tests the model, returning training and testing performance.
 3) If desired, writes a summary file containing the parameters and train/test
@@ -28,7 +28,7 @@ This programn does the following:
 """
 
 import os
-import typing
+from typing import Dict, List, Optional, Text, Tuple, Union
 
 from absl import app
 from absl import flags
@@ -41,55 +41,53 @@ from telluride_decoding import brain_model
 from telluride_decoding import cca
 from telluride_decoding import infer_decoder
 
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
-
+import tensorflow as tf
 
 
 # Use attr to not preclude PY2 usage for now.
 @attr.s
 class DecodingOptions(object):
   """A class encapsulating all the parameters for a decoding experiment."""
-  attended_field = attr.ib(init=False, type=typing.Text, default='attend')
+  attended_field = attr.ib(init=False, type=Text, default='attend')
   batch_norm = attr.ib(init=False, type=bool, default=False)
   batch_size = attr.ib(init=False, type=int, default=512)
   cca_dimensions = attr.ib(init=False, type=int, default=10)
-  check_file_pattern = attr.ib(init=False, type=typing.Text, default='')
+  check_file_pattern = attr.ib(init=False, type=Text, default='')
   correlation_frames = attr.ib(init=False, type=int, default=100)
-  correlation_reducer = attr.ib(init=False, type=typing.Text, default='lda')
-  data = attr.ib(init=False, type=typing.Text, default='tfrecords')
+  correlation_reducer = attr.ib(init=False, type=Text, default='lda')
+  data = attr.ib(init=False, type=Text, default='tfrecords')
   debug = attr.ib(init=False, type=bool, default=False)
-  dnn_regressor = attr.ib(init=False, type=typing.Text,
+  dnn_regressor = attr.ib(init=False, type=Text,
                           default='fullyconnected')
   dropout = attr.ib(init=False, type=float, default=0.0)
   epoch_count = attr.ib(init=False, type=int, default=100)
   frame_rate = attr.ib(init=False, type=float, default=100.0)
-  hidden_units = attr.ib(init=False, type=typing.Text, default='20-20')
-  input2_field = attr.ib(init=False, type=typing.Text, default='')
+  hidden_units = attr.ib(init=False, type=Text, default='20-20')
+  input2_field = attr.ib(init=False, type=Text, default='')
   input2_post_context = attr.ib(init=False, type=int, default=0)
   input2_pre_context = attr.ib(init=False, type=int, default=0)
-  input_field = attr.ib(init=False, type=typing.Text, default='mel_spectrogram')
+  input_field = attr.ib(init=False, type=Text, default='mel_spectrogram')
   learning_rate = attr.ib(init=False, type=float, default=0.05)
-  loss = attr.ib(init=False, type=typing.Text, default='mse')
+  loss = attr.ib(init=False, type=Text, default='mse')
   min_context = attr.ib(init=False, type=int, default=0)
-  output_field = attr.ib(init=False, type=typing.Text, default='envelope')
+  output_field = attr.ib(init=False, type=Text, default='envelope')
   post_context = attr.ib(init=False, type=int, default=0)
   pre_context = attr.ib(init=False, type=int, default=0)
   random_mixup_batch = attr.ib(init=False, type=bool, default=False)
   regularization_lambda = attr.ib(init=False, type=float, default=0.1)
-  saved_model_dir = attr.ib(init=False, type=typing.Text, default=None)
+  saved_model_dir = attr.ib(init=False, type=Text, default=None)
   shuffle_buffer_size = attr.ib(init=False, type=int, default=100000)
-  summary_dir = attr.ib(init=False, type=typing.Text, default='/tmp/tf')
-  tensorboard_dir = attr.ib(init=False, type=typing.Text, default=None)
-  test_file_pattern = attr.ib(init=False, type=typing.Text, default='')
-  test_metric = attr.ib(init=False, type=typing.Text,
+  summary_dir = attr.ib(init=False, type=Text, default='/tmp/tf')
+  tensorboard_dir = attr.ib(init=False, type=Text, default=None)
+  test_file_pattern = attr.ib(init=False, type=Text, default='')
+  test_metric = attr.ib(init=False, type=Text,
                         default='pearson_correlation_first')
-  tfexample_dir = attr.ib(init=False, type=typing.Text, default=None)
-  tfexample_pattern = attr.ib(init=False, type=typing.Text, default='')
-  train_file_pattern = attr.ib(init=False, type=typing.Text, default='')
-  validate_file_pattern = attr.ib(init=False, type=typing.Text, default='')
+  tfexample_dir = attr.ib(init=False, type=Text, default=None)
+  tfexample_pattern = attr.ib(init=False, type=Text, default='')
+  train_file_pattern = attr.ib(init=False, type=Text, default='')
+  validate_file_pattern = attr.ib(init=False, type=Text, default='')
 
-  def set_flags(self, all_flags=flags.FLAGS):
+  def set_flags(self, all_flags: flags.FlagValues = flags.FLAGS):
     """Sets all the parameters of a model based on global FLAGS variable."""
     self.attended_field = all_flags.attended_field
     self.batch_norm = all_flags.batch_norm
@@ -129,7 +127,8 @@ class DecodingOptions(object):
     self.validate_file_pattern = all_flags.validate_file_pattern
     return self
 
-  def experiment_parameters(self, delimiter=','):
+  def experiment_parameters(
+      self, delimiter: Optional[str] = ',') -> Union[List[str], str]:
     """Turns the list of parameters into a readable string for summaries.
 
     Args:
@@ -252,7 +251,9 @@ flags.DEFINE_integer('run', 0,
 ######################### Main Program ##############################
 
 
-def create_brain_model(model_flags, input_dataset):
+def create_brain_model(
+    model_flags: DecodingOptions,
+    input_dataset: tf.data.Dataset) -> brain_model.BrainModel:
   """Creates the right kind of brain model.
 
   Args:
@@ -305,7 +306,11 @@ def create_brain_model(model_flags, input_dataset):
   return bm
 
 
-def train_and_test(my_flags, test_brain_data, test_brain_model, epochs=1):
+def train_and_test(my_flags: DecodingOptions,
+                   test_brain_data: brain_data.BrainData,
+                   test_brain_model: brain_model.BrainModel,
+                   epochs: int = 1) -> Tuple[Dict[str, float],
+                                             Dict[str, float]]:
   """Trains and tests using the given dataset and model params.
 
   Args:
@@ -340,8 +345,10 @@ def train_and_test(my_flags, test_brain_data, test_brain_model, epochs=1):
   return train_results, test_results
 
 
-def write_experiment_summary(my_flags, train_results, test_results,
-                             dprime=None):
+def write_experiment_summary(my_flags: DecodingOptions,
+                             train_results: Dict[str, float],
+                             test_results: Dict[str, float],
+                             dprime: Optional[float] = None):
   """Writes a summary of the experiment to the output directory.
 
   Note: The token PARAMS is replaced with the current experiment summary. This
@@ -398,7 +405,7 @@ def write_experiment_summary(my_flags, train_results, test_results,
     logging.info('Wrote summary results to %s', results_file)
 
 
-def check_files(exp_data_dir, tfexample_pattern='.tfrecords'):
+def check_files(exp_data_dir: str, tfexample_pattern: str = '.tfrecords'):
   """Checks all the input files to make sure they contain valid TFExample data.
 
   Logs the number of records in each file.
@@ -421,7 +428,10 @@ def check_files(exp_data_dir, tfexample_pattern='.tfrecords'):
     logging.info('%s: %d', f, brain_data.count_tfrecords(f)[0])
 
 
-def train_lda_model(brain_dataset, trained_model, my_flags):
+def train_lda_model(brain_dataset: brain_data.BrainData,
+                    trained_model: brain_model.BrainModel,
+                    my_flags: DecodingOptions) -> Tuple[float,
+                                                        infer_decoder.Decoder]:
   """Train the LDA dimension reducer on the output of a regressor model.
 
   This routine takes a dataset, runs it through a pretrained model that computes
@@ -467,11 +477,16 @@ def train_lda_model(brain_dataset, trained_model, my_flags):
   return dprime, decoder
 
 
-def run_decoding_experiment(my_flags):
+def run_decoding_experiment(
+    my_flags: DecodingOptions) -> Tuple[Dict[str, float],
+                                        Dict[str, float],
+                                        float]:
   """Runs one decoding experiment: assemble data, train, evaluate.
 
   Args:
     my_flags: A decoding flags object telling how to do the decoding.
+  Returns:
+    Dictionary of training results, testing results, and the d-prime after LDA
   """
   if my_flags.debug:
     logging.set_verbosity(logging.DEBUG)
@@ -488,11 +503,12 @@ def run_decoding_experiment(my_flags):
 
   if my_flags.check_file_pattern:
     check_files(my_flags.tfexample_dir, my_flags.tfexample_pattern)
-    return
+    return {}, {}, 0.0
 
   # Create the dataset we'll use for this experiment.
   test_brain_data = brain_data.create_brain_dataset(
       my_flags.data, my_flags.input_field, my_flags.output_field,
+      attended_field=my_flags.attended_field,
       frame_rate=my_flags.frame_rate,
       pre_context=my_flags.pre_context, post_context=my_flags.post_context,
       in2_fields=my_flags.input2_field,
@@ -552,6 +568,7 @@ def run_decoding_experiment(my_flags):
     final_decoder.save_parameters(
         os.path.join(my_flags.saved_model_dir, 'decoder_model.json'))
     print('Wrote saved model to %s.' % my_flags.saved_model_dir)
+  return train_results, test_results, dprime
 
 
 def main(argv):
@@ -564,5 +581,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   app.run(main)

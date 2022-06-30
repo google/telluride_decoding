@@ -141,6 +141,17 @@ class IngestTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       trial.assemble_brain_data(['TRIG', 'TRIG', 'F3'])
 
+  def test_brain_trial_sound(self):
+    sound_filename = 'tapestry.wav'
+    trial = ingest.BrainTrial(sound_filename)
+    trial.load_sound(sound_filename, sound_dir=self._test_dir)
+    self.assertEqual(trial.sound_fs, 16000)
+
+    new_data = np.arange(4)
+    self.assertFalse(np.all(trial.sound_data == new_data))
+    trial.sound_data = new_data
+    self.assertTrue(np.all(trial.sound_data == new_data))
+
   def test_mean_std(self):
     a = np.random.randn(3, 5)
     b = np.random.randn(3, 5)

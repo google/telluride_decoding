@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-# Lint as: python2 python3
 """Utilities to plot results."""
 
 # To prevent tkinter errors as per: https://stackoverflow.com/a/37605654

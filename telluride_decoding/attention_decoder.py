@@ -17,17 +17,22 @@ Dec 2014, Montreal, QC, Canada.
 """
 
 import itertools
+from typing import Optional, Sequence, Tuple, Union
+
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_aad_results(decision, attention_flag=None,
-                     decision_upper=None, decision_lower=None,
-                     t=None, xlabel='Time (frames)',
-                     ylabel='Prob of Speaker 1',
-                     title='AAD Decoding Result',
-                     linecolor='blue'):
+def plot_aad_results(decision: np.ndarray,
+                     attention_flag: Optional[np.ndarray] = None,
+                     decision_upper: Optional[np.ndarray] = None,
+                     decision_lower: Optional[np.ndarray] = None,
+                     t: Optional[np.ndarray] = None,
+                     xlabel: str = 'Time (frames)',
+                     ylabel: str = 'Prob of Speaker 1',
+                     title: str = 'AAD Decoding Result',
+                     linecolor: str = 'blue'):
   """Plots the results of an attention decoding experiment.
 
   Show decision variable, along with upper and lower probability bounds.
@@ -110,12 +115,25 @@ def plot_aad_results(decision, attention_flag=None,
 
 class AttentionDecoder(object):
   """Base attention decoder.  Winner takes all.
+
+  Given two correlation results (from two different sources or models) decide
+  whether the first model fits the data better than the second model.
+
+  For this basic decoder, it's an instantenous comparison, without hysteresis.
+
+  Note: the result returned by the attention function a boolean saying whether
+  the subject is attending to the first speaker.
   """
 
-  def attention(self, r1, r2):
+  def attention(self,
+                r1: Union[float, np.ndarray],
+                r2: Union[float, np.ndarray]) -> Tuple[Union[float, bool],
+                                                       Union[float, np.ndarray],
+                                                       Union[float,
+                                                             np.ndarray]]:
     return np.mean(r1) > np.mean(r2), 0, 0
 
-  def tune(self, r1, r2):
+  def tune(self, r1: Sequence[float], r2: Sequence[float]):
     """An optional training step for tuning parameters."""
     del r1, r2
 
@@ -132,7 +150,12 @@ class StepAttentionDecoder(AttentionDecoder):
   def __init__(self):
     self.state = 0.5
 
-  def attention(self, r1, r2):
+  def attention(self,
+                r1: Union[float, np.ndarray],
+                r2: Union[float, np.ndarray]) -> Tuple[Union[float, bool],
+                                                       Union[float, np.ndarray],
+                                                       Union[float,
+                                                             np.ndarray]]:
     """Calculate the attention decision using simple comparison at this time.
 
     Args:
@@ -157,8 +180,14 @@ class StateSpaceAttentionDecoder(AttentionDecoder):
   some sort of decoding algorithm.
   """
 
-  def __init__(self, outer_iter, inner_iter, newton_iter, fs_corr,
-               forward_lag=0, backward_lag=13, offset=0.0):
+  def __init__(self,
+               outer_iter: int,
+               inner_iter: int,
+               newton_iter: int,
+               fs_corr: float,
+               forward_lag: int = 0,
+               backward_lag: int = 13,
+               offset: float = 0.0):
     """Initializer.
 
     Args:
@@ -241,11 +270,11 @@ class StateSpaceAttentionDecoder(AttentionDecoder):
     self.rho_d = [1.7060, 0.64395]
     self.mu_d = [-0.3994, -1.5103]
 
-  def tune(self, r1, r2):
+  def tune(self, r1: Sequence[float], r2: Sequence[float]):
     """A more user friendly name, to mirror super class' name."""
     return self.tune_log_normal_priors(r1, r2)
 
-  def tune_log_normal_priors(self, r1, r2):
+  def tune_log_normal_priors(self, r1: Sequence[float], r2: Sequence[float]):
     """Tune the prior distributions' parameters on some initial data.
 
     Find the MLE estimate of the log normal parameters for the attended and
@@ -297,7 +326,12 @@ class StateSpaceAttentionDecoder(AttentionDecoder):
     self.alpha_0 = [6.4113e+02, 4.0434e+03]
     self.beta_0 = [3.7581e+02, 6.2791e+03]
 
-  def attention(self, r1, r2):
+  def attention(self,
+                r1: Union[float, np.ndarray],
+                r2: Union[float, np.ndarray]) -> Tuple[Union[float, bool],
+                                                       Union[float, np.ndarray],
+                                                       Union[float,
+                                                             np.ndarray]]:
     """Compute the attentional state after receiving two new correlations.
 
     Returns the mean and error bounded prediction of the attentional state
@@ -415,10 +449,13 @@ class StateSpaceAttentionDecoder(AttentionDecoder):
               1.0/(1+np.exp(-self.z_dyn[-1]-self.c0*np.sqrt(self.eta_dyn[-1]))),
               1.0/(1+np.exp(-self.z_dyn[-1]+self.c0*np.sqrt(self.eta_dyn[-1]))))
     return (0.5, 0.5, 0.5)  # No information, so return undecided.
+    # TODO: This really should return a boolean!
 
 
-def create_attention_decoder(type_name, window_step=100, frame_rate=100.0,
-                             ssd_offset=0.0):
+def create_attention_decoder(type_name: str,
+                             window_step: int = 100,
+                             frame_rate: float = 100.0,
+                             ssd_offset: float = 0.0) -> AttentionDecoder:
   """Creates any of the attention decoders, based on a name string.
 
   Args:

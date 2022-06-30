@@ -292,7 +292,7 @@ class PreprocessTest(parameterized.TestCase):
     f0 = 440  # Hz
     # Apply a Gaussian window to the sinusoid, and make sure the intensity
     # comes out with the same shape.
-    window = scipy.signal.gaussian(fs_in, std=fs_in/4.0).reshape(-1, 1)
+    window = scipy.signal.windows.gaussian(fs_in, std=fs_in/4.0).reshape(-1, 1)
     t = np.linspace(0, 1, fs_in).reshape(-1, 1)
     audio_data = np.sin(2*np.pi*t*f0) * window
 
@@ -311,7 +311,7 @@ class PreprocessTest(parameterized.TestCase):
     fs_in = 16000
     fs_out = 16000
     f0 = 6000  # Hz
-    window = scipy.signal.gaussian(fs_in, std=fs_in/4.0)
+    window = scipy.signal.windows.gaussian(fs_in, std=fs_in/4.0)
     t = np.linspace(0, 1, fs_in)
     audio_data = np.sin(2*np.pi*t*f0) * window
 
