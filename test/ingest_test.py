@@ -64,7 +64,7 @@ class IngestTest(absltest.TestCase):
     self.assertEqual(s.signal[0, 1], 9)
 
     # Test some of the parameter checking.
-    with self.assertRaises(ValueError):
+    with self.assertRaises(TypeError):
       s = ingest.BrainSignal(42, test_data, test_sr, test_source)
 
   def test_memory_brain_data_file(self):
@@ -229,7 +229,7 @@ class IngestTest(absltest.TestCase):
     test_dir = os.path.join(self._test_dir, 'meg')
     experiment = ingest.BrainExperiment(trial_dict,
                                         test_dir, test_dir)
-    experiment.load_all_data(test_dir, test_dir)
+    experiment.load_all_data()
     summary = experiment.summary()
     self.assertIn('Found 1 trials', summary)
     self.assertIn('Trial subj01_1ksamples: 2 EEG channels with 2.5s of '
@@ -257,7 +257,7 @@ class IngestTest(absltest.TestCase):
                                         self._test_dir, self._test_dir,
                                         frame_rate=frame_sr)
     self.assertTrue(experiment)
-    experiment.load_all_data(self._test_dir, self._test_dir)
+    experiment.load_all_data()
     summary = experiment.summary()
     self.assertIn('Found 1 trials', summary)
     self.assertIn('Trial trial_2: 2 EEG channels with 2s of eeg data', summary)
@@ -304,7 +304,7 @@ class IngestTest(absltest.TestCase):
                                         self._test_dir, self._test_dir,
                                         frame_rate=frame_sr)
     self.assertTrue(experiment)
-    experiment.load_all_data(self._test_dir, self._test_dir)
+    experiment.load_all_data()
     summary = experiment.summary()
     self.assertIn('Found 1 trials', summary)
     self.assertIn('Trial trial_2: 2 EEG channels with 2s of eeg data', summary)

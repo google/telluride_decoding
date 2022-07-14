@@ -105,8 +105,9 @@ class BrainData(object):
                in2_fields: Optional[Union[str, List[str]]] = None,
                in2_pre_context: int = 0,
                in2_post_context: int = 0,
+               input_offset: int = 0,
                attended_field: Optional[str] = None,
-               initial_batch_size: int = 1000,
+               initial_batch_size: int = 1000000,  # Essentially entire file
                final_batch_size: int = 1000,
                repeat_count: int = 1,
                shuffle_buffer_size: int = 1000,
@@ -133,6 +134,8 @@ class BrainData(object):
         in regression.
       in2_post_context: Number of samples of input 2 after the current time
         in regression.
+      input_offset: How many frames to drop (if positive) from start of input
+        to align with the output.  Negative values drop frames from the output.
       attended_field: TFRecord feature name that says which speaker is being
         attended.
       initial_batch_size: Number of samples to use before adding context.
@@ -179,6 +182,7 @@ class BrainData(object):
     self.in1_post_context = post_context
     self.in2_pre_context = in2_pre_context
     self.in2_post_context = in2_post_context
+    self.input_offset = input_offset
     self.attended_field = attended_field
     self.initial_batch_size = initial_batch_size
     self.final_batch_size = final_batch_size
@@ -409,6 +413,7 @@ class BrainData(object):
         frame.
       self.in2_pre_context - Number of frames to prepend to the second input.
       self.in2_post_context - Number of frames to append after the second input.
+      self.input_offset - Number of frames to offset in1 versus in2 or output
 
     Returns:
       The new dataset with the desired temporal context.
@@ -420,7 +425,21 @@ class BrainData(object):
     def window_one_stream_new(x: tf.Tensor,
                               pre_context: int,
                               post_context: int) -> tf.data.Dataset:
-      """Create extra temporal context for one stream of data."""
+      """Create extra temporal context for one stream of data.
+
+      Each output frame will have pre_context frames of the input from before
+      the current frame, the current frame, and then post_context frames of the
+      input after the current frame.
+
+      Args:
+        x: The input tensor, shape num_frames x num_channels.
+        pre_context: How many frames of context to add before the current frame.
+        post_context: How many frames of context after the current frame.
+
+      Returns:
+        A tf.dataset with shape N' x (pre_context+1+post_context)*C, where N' is
+        shortened to account for the frames where there is not enough context.
+      """
       logging.info(' Window_one_stream: adding %d and %d frames of context '
                    'to stream.', pre_context, post_context)
       total_context = pre_context + 1 + post_context
@@ -440,8 +459,21 @@ class BrainData(object):
     def window_data(x: tf.Tensor, x2: tf.Tensor, y: tf.Tensor, a: tf.Tensor,
                     pre_context: int = 0, post_context: int = 0,
                     in2_pre_context: int = 0,
-                    in2_post_context: int = 0) -> tf.data.Dataset:
+                    in2_post_context: int = 0,
+                    input_offset: int = 0) -> tf.data.Dataset:
       """Creates extra temporal context for both input streams."""
+      # First remove input offsets from either x or (x2 and y)
+      if input_offset > 0:
+        print(f'Shifting x by {input_offset} frames'
+              f' ({input_offset/self.frame_rate}s)')
+        x = x[input_offset:, :]
+        # Don't worry about excess lengths since zip will truncate.
+      elif input_offset < 0:
+        print(f'Shifting x2 and y by {input_offset} frames'
+              f' ({input_offset/self.frame_rate}s)')
+        x2 = x2[-input_offset:, :]
+        y = y[-input_offset:, :]
+
       x_with_context = window_one_stream_new(x, pre_context, post_context)
       x2_with_context = window_one_stream_new(x2, in2_pre_context,
                                               in2_post_context)
@@ -452,8 +484,10 @@ class BrainData(object):
 
     if not isinstance(dataset_without_context, tf.data.Dataset):
       raise TypeError('dataset for window_data must be a tf.data.Dataset')
+
     additional_context = (self.in1_pre_context or self.in1_post_context or
-                          self.in2_pre_context + self.in2_post_context)
+                          self.in2_pre_context or self.in2_post_context or
+                          self.input_offset)
     if additional_context:
       batched_dataset = dataset_without_context.batch(self.initial_batch_size)
       new_dataset = batched_dataset.flat_map(
@@ -462,7 +496,8 @@ class BrainData(object):
               pre_context=self.in1_pre_context,
               post_context=self.in1_post_context,
               in2_pre_context=self.in2_pre_context,
-              in2_post_context=self.in2_post_context))
+              in2_post_context=self.in2_post_context,
+              input_offset=self.input_offset))
     else:
       new_dataset = dataset_without_context
     return new_dataset
@@ -544,7 +579,8 @@ class TestBrainData(BrainData):
         (self.saved_input_data, self.saved_input2_data,
          self.saved_output_data, self.saved_attention_data))
     if temporal_context and (self.in1_pre_context or self.in1_post_context or
-                             self.in2_pre_context or self.in2_post_context):
+                             self.in2_pre_context or self.in2_post_context or
+                             self.input_offset):
       saved_dataset = self.add_temporal_context(saved_dataset)
     return self.final_shuffle_and_batch(mode, saved_dataset,
                                         mixup_batch=mixup_batch)
@@ -641,14 +677,14 @@ class TFExampleData(BrainData):
               '-bad-' not in f and
               self.data_pattern in f)
       ]
-    logging.info('Found %d files for TFExample data analysis.',
-                 len(self._cached_file_names))
-    print('Found: %s' % self._cached_file_names)
+    logging.info('_get_data_file_names found %d files for TFExample data '
+                 'analysis.', len(self._cached_file_names))
     if not self._cached_file_names:
       raise ValueError('Should not have an empty list of data files from %s.' %
                        exp_data_dir)
     self.features = discover_feature_shapes(self._cached_file_names[0])
-    logging.info('Discover_feature_shapes found: %s', self.features)
+    logging.info('Discover_feature_shapes for %s files found: %s',
+                 self._cached_file_names[0], self.features)
 
   def create_dataset(self, mode: str = 'train',
                      temporal_context: bool = True,
@@ -927,8 +963,9 @@ def create_brain_dataset(data_type: str, in_fields: str, out_field: str,
                          in2_fields: Optional[str] = None,
                          in2_pre_context: int = 0,
                          in2_post_context: int = 0,
+                         input_offset: int = 0,
                          attended_field: Optional[str] = None,
-                         initial_batch_size: int = 1000,
+                         initial_batch_size: int = 1000000,  # Whole file
                          final_batch_size: int = 1000,
                          repeat_count: int = 1,
                          shuffle_buffer_size: int = 1000,
@@ -951,6 +988,7 @@ def create_brain_dataset(data_type: str, in_fields: str, out_field: str,
       in regression.
     in2_post_context: Number of samples of input 2 after the current time
       in regression.
+    input_offset: How much to offset x stream compared to x2 and y.
     attended_field: Where is the subject attending? This signal is passed
       through the pipeline and is not used until verifying the performance.
     initial_batch_size: Number of samples to use before adding context.
@@ -979,6 +1017,7 @@ def create_brain_dataset(data_type: str, in_fields: str, out_field: str,
                          in2_fields=in2_fields,
                          in2_pre_context=in2_pre_context,
                          in2_post_context=in2_post_context,
+                         input_offset=input_offset,
                          attended_field=attended_field,
                          initial_batch_size=initial_batch_size,
                          final_batch_size=final_batch_size,
@@ -996,6 +1035,7 @@ def create_brain_dataset(data_type: str, in_fields: str, out_field: str,
                          in2_fields=in2_fields,
                          in2_pre_context=in2_pre_context,
                          in2_post_context=in2_post_context,
+                         input_offset=input_offset,
                          initial_batch_size=initial_batch_size,
                          final_batch_size=final_batch_size,
                          repeat_count=repeat_count,

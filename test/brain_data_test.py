@@ -97,9 +97,11 @@ class BrainDataTest(absltest.TestCase):
   # Just a list of consecutive integers, to make it easier to debug batching
   # issues and the like.
 
-  def create_linear_dataset(self, dataset, mode='program_test',
-                            num_samples=1000, offset=1000,
-                            mixup_batch=False):
+  def create_linear_dataset(self,
+                            dataset: BrainData,
+                            mode: str = 'program_test',
+                            num_samples: int = 1000, offset: int = 1000,
+                            mixup_batch: bool = False):
     """Create a dataset of consecutive numbers for testing batching.
 
     Create a two column matrix for x, a one column matrix for x2, and a
@@ -145,21 +147,39 @@ class BrainDataTest(absltest.TestCase):
     we know to expect, especially as we add context.
     """
     print('********** test_linear_batching **************')
-    batch_size = 999   # Big batch to minimize chance of random alignment.
+    batch_size = 900   # Big batch to minimize chance of random alignment.
     frame_rate = 100.0
     # No shift
-    def create_test_dataset(pre_context, post_context, mode, mixup_batch=False):
+    def create_test_dataset(pre_context, post_context, mode, input_offset=0,
+                            mixup_batch=False):
+      """Create a test dataset, ensuring basic data shapes are correct.
+
+      Args:
+        pre_context: # of frames before the current frame to add for context.
+        post_context: # of frames after the current frame to add for context.
+        mode: Data generation mode, program test means don't shuffle for tests.
+        input_offset: How much temporal offset to introduce between data.
+        mixup_batch: Shuffle the batch if true.
+
+      Returns:
+        Tuple of input data (np), input2_data (np), output (np) and the
+        BrainData object.
+      """
       brain_data = TestBrainData('input_1', 'output', frame_rate,
                                  in2_fields='input_2',
                                  final_batch_size=batch_size,
                                  pre_context=pre_context,
                                  post_context=post_context,
+                                 input_offset=input_offset,
                                  repeat_count=10)
       dataset = self.create_linear_dataset(brain_data, mode,
                                            mixup_batch=mixup_batch)
+      features = -1  # Unused value to test for next step
       for next_element in dataset:
         (features, output) = next_element
         break
+      self.assertNotEqual(features, -1)  # Test for not empty dataset
+
       input_data = features['input_1']
       input2_data = features['input_2']
       print('Input_data.shape', input_data.shape)
@@ -201,7 +221,58 @@ class BrainDataTest(absltest.TestCase):
     self.assertTrue(all_in_order(input_data))
     self.assertTrue(all_in_order(output))
 
+    # Now test with an input_offset.
+    print('********** test_linear_batching - Input Offset **************')
+    # Input offset of +1
+    input_data, input2_data, output, brain_data = create_test_dataset(
+        pre_context, post_context, 'program_test', input_offset=1)
+    print(f'input_data: {input_data[0:3, :]}')
+    print(f'input2_data: {input2_data[0:3, :]}')
+    print(f'output: {output[0:3, :]}')
+    self.assertTrue(np.all(np.equal(input_data[0:3, :], [[1, 1001],
+                                                         [2, 1002],
+                                                         [3, 1003]])))
+    self.assertTrue(np.all(np.equal(input2_data[0:3, :], [[2000],
+                                                          [2001],
+                                                          [2002]])))
+    self.assertTrue(np.all(np.equal(output[0:3, :], [[3000],
+                                                     [3001],
+                                                     [3002]])))
+
+    # Input offset of -1
+    input_data, input2_data, output, brain_data = create_test_dataset(
+        pre_context, post_context, 'program_test', input_offset=-1)
+    print(f'input_data: {input_data[0:3, :]}')
+    print(f'input2_data: {input2_data[0:3, :]}')
+    print(f'output: {output[0:3, :]}')
+    self.assertTrue(np.all(np.equal(input_data[0:3, :], [[0, 1000],
+                                                         [1, 1001],
+                                                         [2, 1002]])))
+    self.assertTrue(np.all(np.equal(input2_data[0:3, :], [[2001],
+                                                          [2002],
+                                                          [2003]])))
+    self.assertTrue(np.all(np.equal(output[0:3, :], [[3001],
+                                                     [3002],
+                                                     [3003]])))
+
+    # Input offset of 2
+    input_data, input2_data, output, brain_data = create_test_dataset(
+        pre_context, post_context, 'program_test', input_offset=2)
+    print(f'input_data: {input_data[0:3, :]}')
+    print(f'input2_data: {input2_data[0:3, :]}')
+    print(f'output: {output[0:3, :]}')
+    self.assertTrue(np.all(np.equal(input_data[0:3, :], [[2, 1002],
+                                                         [3, 1003],
+                                                         [4, 1004]])))
+    self.assertTrue(np.all(np.equal(input2_data[0:3, :], [[2000],
+                                                          [2001],
+                                                          [2002]])))
+    self.assertTrue(np.all(np.equal(output[0:3, :], [[3000],
+                                                     [3001],
+                                                     [3002]])))
+
     # Now test with training data, to make sure batches are randomized.
+    print('********** test_linear_batching - Randomized Batches **************')
     input_data, input2_data, output, brain_data = create_test_dataset(
         pre_context, post_context, 'train')
     self.assertFalse(all_in_order(input_data))

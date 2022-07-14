@@ -76,8 +76,8 @@ class IngestBrainVisionTest(absltest.TestCase):
     trial_name = ingest.BrainExperiment.delete_suffix(sound_filename, '.wav')
     trial_dict = {trial_name: [sound_filename, df]}
     experiment = ingest.BrainExperiment(trial_dict,
-                                        self._test_data, self._test_data+'/meg')
-    experiment.load_all_data(self._test_data+'/meg', self._test_data)
+                                        self._test_data+'/meg', self._test_data)
+    experiment.load_all_data()
     summary = experiment.summary()
     self.assertIn('Found 1 trials', summary)
     self.assertIn('Trial subj01_1ksamples: 65 EEG channels with 0.01s of '

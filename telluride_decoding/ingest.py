@@ -44,18 +44,16 @@ A simpler path uses your own python code to accumulate the different signals,
 and then uses the following template to write out the overall tfrecord files. In
 this example, the feature data (eeg or audio) are stored in arrays called
 f1_data and f2_data, which are num_samples x num_feature_dimensions.  Any
-number of feature maps can be used (only 2 are used here.) And the /tmp
-parameters are just dummy parameters since all the data is in-memory
-numpy arrays.
+number of feature maps can be used (only 2 are used here.)
 
   trial_dict = {}
   for i in range(len(f1_data)):
     # Each trial is described in a list of a sound and zero+ EEG recordings.
-    trial_dict[f'{i}'] = [{},  # Empty dictionary indicating no sound.
+    trial_dict[f'{i}'] = [{},  # Empty dictionary indicating no sound so far.
                          ]
 
   experiment = ingest.BrainExperiment(trial_dict, '/tmp', '/tmp')
-  experiment.load_all_data('/tmp', '/tmp')
+  experiment.load_all_data()
 
   for i in range(len(f1_data)):
     experiment.trial_data(f'{i}').add_model_feature('f1', f1_data[i])
@@ -73,7 +71,7 @@ import collections
 import os
 import pickle
 import tempfile
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 from absl import app
 from absl import logging
@@ -84,6 +82,13 @@ import scipy.io.wavfile
 import scipy.signal
 import scipy.stats
 import tensorflow as tf
+
+
+def assert_type(var_name: str, var: Any,
+                expected_type: Type[Any]) -> None:
+  if not isinstance(var, expected_type):
+    raise TypeError(f'{var_name} must be of type {expected_type}, ' +
+                    f'but got value {var} of type {type(var)}')
 
 
 class BrainSignal(object):
@@ -101,8 +106,7 @@ class BrainSignal(object):
   def __init__(self, name: str, signal: Union[np.ndarray, List[float]],
                sample_rate: float, data_type: Optional[str] = None):
     # Signal has size of num_times x num_channels.
-    if not isinstance(name, str):
-      raise ValueError('name should be a string or unicode.')
+    assert_type('name', name, str)
     signal = np.asarray(signal)
     if not sample_rate > 0.0:
       raise ValueError('Signal\'s sample rate must be greater than 0.')
@@ -300,8 +304,7 @@ class BrainTrial(object):
 
   @model_features.setter
   def model_features(self, new_dict: Dict[str, np.ndarray]):
-    if not isinstance(new_dict, dict):
-      raise TypeError('audio features for trial must be in the form of a dict.')
+    assert_type('audio features for trial (new_dict)', new_dict, dict)
     self._model_features = new_dict
 
   @property
@@ -327,8 +330,7 @@ class BrainTrial(object):
       name: The name of the feature.
       data: Data which can be transformed into a np array.
     """
-    if not isinstance(name, str):
-      raise TypeError('Feature name must be a string, not a %s' % type(name))
+    assert_type('name', name, str)
     if not self._model_features:
       self._model_features = {}
     self._model_features[name] = np.asarray(data)
@@ -407,9 +409,7 @@ class BrainTrial(object):
       IOError: if eeg_dir doesn't exist.
       TypeError: for bad parameter values.
     """
-    if not isinstance(brain_data, BrainDataFile):
-      raise TypeError('Brain data for this trial must be a BrainDataFile, '
-                      'not %s' % type(brain_data))
+    assert_type('brain_data', brain_data, BrainDataFile)
     if not tf.io.gfile.exists(eeg_dir):
       raise IOError('brain data director %s does not exist.' % eeg_dir)
     brain_data.load_all_data(eeg_dir)
@@ -425,9 +425,7 @@ class BrainTrial(object):
 
   def iterate_brain_channels(self, data_type: Optional[str] = None):
     for a_brain_signal in self._brain_data.values():
-      if not isinstance(a_brain_signal, BrainSignal):
-        raise TypeError('BrainData signal must be a BrainSignal, not a %s.' %
-                        type(a_brain_signal))
+      assert_type('a_brain_signal', a_brain_signal, BrainSignal)
       if data_type is None or a_brain_signal.data_type == data_type:
         yield a_brain_signal
 
@@ -480,9 +478,7 @@ class BrainTrial(object):
     Returns:
       A list of the times (in sample #) of the trigger starts.
     """
-    if not isinstance(self._sound_data, np.ndarray):
-      raise TypeError('Sound data is not an numpy array, but a %s.' %
-                      type(self._sound_data))
+    assert_type('self._sound_data', self._sound_data, np.ndarray)
     if channel_with_trigger > self._sound_data.shape[1]:
       raise ValueError('Trigger channel (%d) too high.' % channel_with_trigger)
     trigger_signal = self._sound_data[:, channel_with_trigger]
@@ -631,8 +627,7 @@ class BrainTrial(object):
     Raises:
       TypeError for bad parameter values.
     """
-    if not isinstance(tf_dir, str):
-      raise TypeError('tf_dir must be a string.')
+    assert_type('tf_dir', tf_dir, str)
 
     # Add in all the available audio features. Assemble_brain_data adds the
     # eeg data before we get here.
@@ -700,15 +695,11 @@ class MemoryBrainDataFile(BrainDataFile):
 
   def __init__(self, trial_dict, sr=64, data_type: Optional[str] = None,
                name: str = 'in_memory'):
-    if not isinstance(trial_dict, dict):
-      raise TypeError('Input must be a dictionary of channel names and arrays.')
+    assert_type('trial_dict', trial_dict, dict)
     if sr <= 0.0:
       raise ValueError('Sample rate must be > 0.')
     for channel_name, channel_data in trial_dict.items():
-      if not isinstance(channel_name, str):
-        raise ValueError(
-            'Channel key %s must be a string in dictionary:' % channel_name,
-            list(trial_dict.keys()))
+      assert_type('channel_name', channel_name, str)
       channel_data = np.asarray(channel_data)
       if len(channel_data.shape) > 2:
         raise ValueError('Bad MemoryBrainDataFile shape for %s(%s)'
@@ -807,14 +798,12 @@ class EdfBrainDataFile(BrainDataFile):
     return self._edf_dict['labels']
 
   def signal_values(self, name: str) -> np.ndarray:
-    if not isinstance(name, str):
-      raise ValueError('Must search for values with a string name.')
+    assert_type('name', name, str)
     channel_number = self.find_channel_index(name)
     return self._edf_dict['signals'][channel_number]
 
   def signal_fs(self, name: str) -> float:
-    if not isinstance(name, str):
-      raise TypeError('Signal\'s name must be a string (or unicode).')
+    assert_type('name', name, str)
     channel_number = self.find_channel_index(name)
     return self._edf_dict['sample_rates'][channel_number]
 
@@ -862,16 +851,26 @@ class BrainExperiment(object):
 
   def __init__(self,
                trial_dict: BrainTrialDict,
-               sound_dir: str,
-               eeg_dir: str,
+               sound_dir: Optional[str] = None,
+               eeg_dir: Optional[str] = None,
                frame_rate: float = 64):
+    """Create a brain experiment from audio and EEG data.
+
+    Args:
+      trial_dict: A dictionary that maps trial name into sound and MEG signals.
+      sound_dir: Where to find the sound data, if trial_dict has strings (file
+        names)
+      eeg_dir: Where to find the brain data, if trial_dict has strings (file
+        names)
+      frame_rate: Sample rate (per second) of the data in this experiment.
+    """
     if not isinstance(trial_dict, dict):
       raise TypeError('trial is specified with a dictionary of data not %s' %
                       trial_dict)
-    if not isinstance(sound_dir, str):
-      raise TypeError(f'The sound_dir must be a string, not {sound_dir}.')
-    if not isinstance(eeg_dir, str):
-      raise TypeError(f'The EEG_dir must be a string, not {eeg_dir}.')
+    if sound_dir:
+      assert_type('sound_dir', sound_dir, str)
+    if eeg_dir:
+      assert_type('eeg_dir', eeg_dir, str)
     self._sound_dir = sound_dir
     self._eeg_dir = eeg_dir
     self._frame_rate = frame_rate
@@ -879,10 +878,8 @@ class BrainExperiment(object):
     self._trial_dict = trial_dict
     for k, v in self._trial_dict.items():
       # Check up front to make we have the right kind of data.
-      if not isinstance(k, str):
-        raise TypeError('Trial name must be a string.')
-      if not isinstance(v, list):
-        raise TypeError('Trial data must be a list [sound, eeg, eeg,...]')
+      assert_type('Trial name', k, str)
+      assert_type('Trial data', v, list)
     self._data_dict = {}
     self._feature_mean = {}
     self._feature_std = {}
@@ -903,12 +900,8 @@ class BrainExperiment(object):
         are used for audio features.
       trial: A BrainTrial class to which we want to add the sound data.
     """
-    if not isinstance(sound_dict, dict):
-      raise TypeError('Sound dictionary must be a dict, not a %s.' %
-                      type(sound_dict))
-    if not isinstance(trial, BrainTrial):
-      raise TypeError('trial argument must be a BrainTrial, not a %s.' %
-                      type(trial))
+    assert_type('Sound dictionary', sound_dict, dict)
+    assert_type('Trial argument', trial, BrainTrial)
     if 'audio_data' in sound_dict and 'audio_sr' in sound_dict:
       logging.info('Adding sound data of size %s and %gHz to trial %s',
                    len(sound_dict['audio_data']), sound_dict['audio_sr'],
@@ -923,33 +916,24 @@ class BrainExperiment(object):
     for trial in self._data_dict.values():
       yield trial
 
-  def load_all_data(self, sound_dir: str, eeg_dir: str, verbose: bool = False):
+  def load_all_data(self, verbose: bool = False):
     """Load all the sound and EEG data for this experiment.
 
     Args:
-      sound_dir: Where to find the sound files for all trials.
-      eeg_dir: Where to find the EEG files for all trials.
       verbose: Print the location of each file we are reading.
     Raises:
       IOError: if sound or eeg directories doesn't exist.
       TypeError for bad parameter values.
     """
-    # TODO: Should these dirs be both here and in the init???
-    if not tf.io.gfile.exists(sound_dir):
-      raise IOError('Sound_dir does not exist: ' + str(sound_dir))
-    if not tf.io.gfile.exists(eeg_dir):
-      raise IOError('EEG_dir does not exist: ' + str(eeg_dir))
     for trial_name, all_data in self._trial_dict.items():
-      if not isinstance(trial_name, str):
-        raise TypeError('trial_name (%s) in trial_dict is not a string.' %
-                        trial_name)
+      assert_type('trial_name', trial_name, str)
       this_trial = BrainTrial(trial_name)
       sound_data = all_data[0]
       if isinstance(sound_data, str):
         if verbose:
           logging.info('load_all_data %s: Reading sound data from %s...',
                        trial_name, sound_data)
-        this_trial.load_sound(sound_data, sound_dir=sound_dir)
+        this_trial.load_sound(sound_data, sound_dir=self._sound_dir)
       elif isinstance(sound_data, dict):
         self.add_sound_data(sound_data, this_trial)
       else:
@@ -957,7 +941,7 @@ class BrainExperiment(object):
       for eeg_data_item in all_data[1:]:
         logging.info('load_all_data %s: Reading EEG data from %s...',
                      trial_name, eeg_data_item)
-        this_trial.load_brain_data(eeg_dir, eeg_data_item)
+        this_trial.load_brain_data(self._eeg_dir, eeg_data_item)
       self._data_dict[trial_name] = this_trial
 
   def check_sound_eeg_files(self):
@@ -968,10 +952,8 @@ class BrainExperiment(object):
     Raises:
       IOError: if sound file doesn't exist.
     """
+    assert_type('self._trial_dict', self._trial_dict, BrainTrialDict)
     for (trial_name, trial_data) in self._trial_dict.items():
-      if not isinstance(self._trial_dict, BrainTrialDict):
-        raise TypeError('Expected a BrainTrailDict for %s, but got a %s' %
-                        (trial_name, type(BrainTrialDict)))
       sound_loc = os.path.join(self._sound_dir, trial_name + '.wav')
       if not tf.io.gfile.exists(sound_loc):
         raise IOError('Can not find %s in %s' % (trial_name, self._sound_dir))
@@ -1027,7 +1009,7 @@ class BrainExperiment(object):
   def z_score_all_data(self):
     """Remove the mean and normalize a dictionary of data.
 
-    For the features, which are stored as entries in a diction, normalize the
+    For the features, which are stored as entries in a dictionary, normalize the
     data so the mean is zero and standard deviation is 1. Arrays in the
     dictionary are modified in place.
     """
@@ -1155,9 +1137,7 @@ def convert_data_to_tfrecords(filename: str, data_dict: Dict[str, np.ndarray]):
   def _float_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
-  if not isinstance(data_dict, dict):
-    raise TypeError('Input data must be a dict, not a %s' %
-                    str(type(data_dict)))
+  assert_type('Input data_dict', data_dict, dict)
   first_key = list(data_dict.keys())[0]
   first_data = data_dict[first_key]
   num_examples = first_data.shape[0]
@@ -1206,8 +1186,7 @@ def discover_feature_shapes(
   Raises:
       ValueError or TypeError for bad parameter values.
   """
-  if not isinstance(tfrecord_file_name, str):
-    raise TypeError('tfrecord_file_name must be a string.')
+  assert_type('tfrecord_file_name', tfrecord_file_name, str)
 
   dataset = tf.data.TFRecordDataset(tfrecord_file_name)
 
@@ -1217,9 +1196,7 @@ def discover_feature_shapes(
     raise ValueError('Could not read any data from tfrecord file.')
   an_example = tf.train.Example.FromString(a_record.numpy())
 
-  if not isinstance(an_example, tf.train.Example):
-    raise TypeError('Did not get a tf.train.Example object, but a %s.' %
-                    type(an_example))
+  assert_type('an_example', an_example, tf.train.Example)
 
   feature_keys = list(an_example.features.feature.keys())
 
@@ -1249,8 +1226,7 @@ def count_tfrecords(tfrecord_file_name: str) -> Tuple[int, bool]:
     A tuple consisting of record_count, error_flag.  The error flag tells if
     the reading failed.
   """
-  if not isinstance(tfrecord_file_name, str):
-    raise TypeError('Input to count_tfrecords must be a string.')
+  assert_type('tfrecord_file_name', tfrecord_file_name, str)
 
   dataset = tf.data.TFRecordDataset(tfrecord_file_name)
 
@@ -1258,9 +1234,7 @@ def count_tfrecords(tfrecord_file_name: str) -> Tuple[int, bool]:
   for a_record in dataset:
     try:
       an_example = tf.train.Example.FromString(a_record.numpy())
-      if not isinstance(an_example, tf.train.Example):
-        raise TypeError('Data read from %s is not a tf.train.Example' %
-                        tfrecord_file_name)
+      assert_type('an_example', an_example, tf.train.Example)
       record_count += 1
     except Exception as e:  # pylint: disable=broad-except
       logging.info('Got an error in count_tfrecords: %s', e)
@@ -1286,8 +1260,7 @@ def read_tfrecords(tfrecord_file_name: str,
   Raises:
     TypeError for bad parameter values.
   """
-  if not isinstance(tfrecord_file_name, str):
-    raise TypeError('Input to read_tfrecords must be a string.')
+  assert_type('tfrecord_file_name', tfrecord_file_name, str)
 
   records = {}
   shapes = discover_feature_shapes(tfrecord_file_name)
@@ -1299,9 +1272,7 @@ def read_tfrecords(tfrecord_file_name: str,
   for a_record in dataset:
     try:
       an_example = tf.train.Example.FromString(a_record.numpy())
-      if not isinstance(an_example, tf.train.Example):
-        raise TypeError('Data read from %s is not a tf.train.Example' %
-                        tfrecord_file_name)
+      assert_type('an_example', an_example, tf.train.Example)
       feature_keys = list(an_example.features.feature.keys())
       if current_frame_count >= start_frame:
         for k in feature_keys:

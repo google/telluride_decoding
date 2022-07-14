@@ -283,10 +283,7 @@ class RegressionDataTelluride4(RegressionData):
       message was printed telling the user how to do it.
     """
     tmp_file = os.path.join(_tmp_dir, 'Telluride2015.mat')
-    download_from_gdrive(
-        url,
-        tmp_file,
-        debug=debug)
+    download_from_gdrive(url, tmp_file, debug=debug)
     cache_file = os.path.join(cache_dir, os.path.split(tmp_file)[1])
     with tf.io.gfile.GFile(tmp_file, 'rb') as old_fp:
       logging.info('Copying %s to %s...', tmp_file, cache_file)
@@ -347,7 +344,7 @@ class RegressionDataTelluride4(RegressionData):
     sound_dir = '.'
     exp = ingest.BrainExperiment(
         trial_dict, sound_dir, eeg_dir, frame_rate=desired_frame_rate)
-    exp.load_all_data(sound_dir, eeg_dir)
+    exp.load_all_data()
     exp.z_score_all_data()
     for trial in exp.iterate_trials():
       trial.assemble_brain_data('eeg_data')
@@ -464,7 +461,7 @@ class RegressionDataJensMemory(RegressionData):
                      ''.join(str(eeg_signal.shape)))
       exp = ingest.BrainExperiment(
           trial_dict, sound_dir, eeg_dir, frame_rate=desired_frame_rate)
-      exp.load_all_data(sound_dir, eeg_dir)
+      exp.load_all_data()
       exp.z_score_all_data()
       for trial in exp.iterate_trials():
         trial.assemble_brain_data('eeg_data')
@@ -677,7 +674,7 @@ class RegressionDataJensImpaired(RegressionData):
       print('Masker audio shape: {}'.format(masker_audio_signal_arr.shape))
       exp = ingest.BrainExperiment(
           trial_dict, sound_dir, eeg_dir, frame_rate=frame_rate)
-      exp.load_all_data(sound_dir, eeg_dir)
+      exp.load_all_data()
       exp.z_score_all_data()
       for trial in exp.iterate_trials():
         trial.assemble_brain_data('eeg_data')
@@ -874,7 +871,7 @@ class RegressionDataKULeuven(RegressionData):
 
       exp = ingest.BrainExperiment(
           trial_dict, sound_dir, eeg_dir, frame_rate=desired_frame_rate)
-      exp.load_all_data(sound_dir, eeg_dir)
+      exp.load_all_data()
       exp.z_score_all_data()
       for trial in exp.iterate_trials():
         trial.assemble_brain_data('eeg_data')
@@ -979,10 +976,8 @@ def main(argv):
   desired_frame_rate = FLAGS.desired_frame_rate or database.desired_frame_rate
   # Get a local copy of the data
   if FLAGS.force or not data_object.is_data_local(cache_dir):
-    print(
-        'Downloading data from Internet to cache_dir:',
-        cache_dir,
-        file=regression_data_print)
+    print(f'Downloading data from Internet ({url}) to cache_dir: {cache_dir}',
+          file=regression_data_print)
     if not data_object.download_data(url, cache_dir):
       print('No data available locally, aborting.')
       return

@@ -66,6 +66,7 @@ class DecodingOptions(object):
   input2_field = attr.ib(init=False, type=Text, default='')
   input2_post_context = attr.ib(init=False, type=int, default=0)
   input2_pre_context = attr.ib(init=False, type=int, default=0)
+  input_offset = attr.ib(init=False, type=int, default=0)
   input_field = attr.ib(init=False, type=Text, default='mel_spectrogram')
   learning_rate = attr.ib(init=False, type=float, default=0.05)
   loss = attr.ib(init=False, type=Text, default='mse')
@@ -106,6 +107,7 @@ class DecodingOptions(object):
     self.input2_field = all_flags.input2_field
     self.input2_post_context = all_flags.input2_post_context
     self.input2_pre_context = all_flags.input2_pre_context
+    self.input_offset = all_flags.input_offset
     self.input_field = all_flags.input_field
     self.learning_rate = all_flags.learning_rate
     self.loss = all_flags.loss
@@ -198,6 +200,9 @@ flags.DEFINE_integer('input2_pre_context', defaults.input2_pre_context,
                      'Number of frames of pre context for output features')
 flags.DEFINE_integer('input2_post_context', defaults.input2_post_context,
                      'Number of frames of post context for output features')
+flags.DEFINE_integer('input_offset', 0,
+                     'Number of frames to drop from first field, use a '
+                     'negative offset to drop from second or output field')
 flags.DEFINE_float('learning_rate', defaults.learning_rate,
                    'The initial learning rate for the ADAM optimizer.')
 flags.DEFINE_enum('loss', defaults.loss, ['mse', 'pearson'],
@@ -514,6 +519,7 @@ def run_decoding_experiment(
       in2_fields=my_flags.input2_field,
       in2_pre_context=my_flags.input2_pre_context,
       in2_post_context=my_flags.input2_post_context,
+      input_offset=my_flags.input_offset,
       final_batch_size=my_flags.batch_size,
       shuffle_buffer_size=my_flags.shuffle_buffer_size,
       data_dir=my_flags.tfexample_dir,
