@@ -23,7 +23,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import google3
 
 from absl import flags
 from absl.testing import absltest
@@ -38,9 +37,7 @@ class AddTriggerTest(absltest.TestCase):
 
   def setUp(self):
     super(AddTriggerTest, self).setUp()
-    self._test_data = os.path.join(
-        flags.FLAGS.test_srcdir,
-        'google3/third_party/py/telluride_decoding/test_data/')
+    self._test_data = os.path.join( flags.FLAGS.test_srcdir, 'test_data')
 
   def test_intervals(self):
     def interval_test(duration=10, minimum_interval=0.5, number=8,

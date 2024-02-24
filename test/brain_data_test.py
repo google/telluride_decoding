@@ -32,7 +32,7 @@ from telluride_decoding.brain_data import mismatch_batch_randomization
 from telluride_decoding.brain_data import TestBrainData
 from telluride_decoding.brain_data import TFExampleData
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 # These flags are defined in decoding.py, but we add them here so we can test
@@ -89,7 +89,7 @@ class BrainDataTest(absltest.TestCase):
   def setUp(self):
     super(BrainDataTest, self).setUp()
     self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
+        flags.FLAGS.test_srcdir,
         'test_data/',
         'meg')
 
@@ -531,6 +531,7 @@ class BrainDataTest(absltest.TestCase):
 
   def get_feature_shapes_from_file(self):
     all_files = []
+    print(f'Looking for files in {self._test_data_dir}')
     for (path, _, files) in tf.io.gfile.walk(self._test_data_dir):
       all_files += [path + '/' + f for f in files if f.endswith('.tfrecords')]
     self.assertNotEmpty(all_files)
@@ -879,5 +880,4 @@ class BrainDataTest(absltest.TestCase):
     self.assertEqual(filtered, ['subj01_1ksamples.tfrecords'])
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

@@ -1156,7 +1156,7 @@ def convert_data_to_tfrecords(filename: str, data_dict: Dict[str, np.ndarray]):
         data = data_dict[k]
         feature = None
         # if type(data[row, 0]) == np.str or type[data[row, 0]:
-        if data.dtype == np.str or data.dtype == '|S1':
+        if data.dtype == str or data.dtype == '|S1':
           feature = _bytes_feature(data[row])
         elif isinstance(data, np.ndarray):
           if data.dtype == np.float64 or data.dtype == np.float32:

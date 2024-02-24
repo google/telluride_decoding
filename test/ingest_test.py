@@ -29,16 +29,14 @@ import scipy.io.wavfile
 import scipy.signal
 from telluride_decoding import ingest
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 class IngestTest(absltest.TestCase):
 
   def setUp(self):
     super(IngestTest, self).setUp()
-    self._test_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_dir = os.path.join(flags.FLAGS.test_srcdir, 'test_data')
 
   def test_brain_signal(self):
     # Test to make sure fix_offset works with 1d signals.
@@ -378,5 +376,4 @@ class IngestTest(absltest.TestCase):
     np.testing.assert_equal(file_data['two'], 2*positive_data)
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

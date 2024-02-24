@@ -19,8 +19,7 @@
 import os
 import matplotlib
 matplotlib.use('Agg')
-import tensorflow.compat.v2 as tf  # pylint: disable=g-import-not-at-top
-# User should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf  # pylint: disable=g-import-not-at-top
 
 
 def matplotlib_pyplot():

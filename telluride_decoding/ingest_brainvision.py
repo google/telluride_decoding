@@ -30,8 +30,7 @@ import re
 
 import numpy as np
 from telluride_decoding import ingest
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
+import tensorflow as tf
 
 
 def parse_bv_keywords(section):

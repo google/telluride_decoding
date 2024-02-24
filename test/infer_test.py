@@ -38,10 +38,8 @@ class InferTest(absltest.TestCase):
 
   def setUp(self):
     super(InferTest, self).setUp()
-    self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/',
-        'meg')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir,
+                                       'test_data', 'meg')
 
   def test_calculate_time_axis(self):
     centers = infer.calculate_time_axis(5, 1, 2, 1)*60   # Convert to seconds
