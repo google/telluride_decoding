@@ -531,7 +531,6 @@ class BrainDataTest(absltest.TestCase):
 
   def get_feature_shapes_from_file(self):
     all_files = []
-    print(f'Looking for files in {self._test_data_dir}')
     for (path, _, files) in tf.io.gfile.walk(self._test_data_dir):
       all_files += [path + '/' + f for f in files if f.endswith('.tfrecords')]
     self.assertNotEmpty(all_files)
