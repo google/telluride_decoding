@@ -64,12 +64,15 @@ class CsvUtilTest(absltest.TestCase):
     dir_name = os.path.join(self._test_data_dir, 'csv_results')
 
     results = csv_util.read_all_results_from_directory(dir_name)
+    # Make dictionary entries are sorted for comparison.
+    for k, v in results.items():
+      results[k] = sorted(v)
 
     self.assertDictEqual(
         results, {
             1e-6: [1.1, 1.2, 2.3, 2.4, 4.2, 5.3],
             0.001: [3.5, 3.6, 4.7, 4.8, 6.7, 8.2],
-            1.0: [5.9, 5.1, 6.2, 6.3, 9.9, 7.1],
+            1.0: [5.1, 5.9, 6.2, 6.3, 7.1, 9.9],
         })
 
   def test_read_results_from_directory_mismatch(self):

@@ -348,7 +348,7 @@ class DecodingTest(absltest.TestCase):
     mock_stdout = io.StringIO()
     with mock.patch('sys.stdout', mock_stdout):
       decoding.run_decoding_experiment(self.model_flags)
-    self.assertIn('Found 1 files for TFExample data analysis.',
+    self.assertIn('Found 3 files for TFExample data analysis.',
                   mock_stdout.getvalue())
 
   @flagsaver.flagsaver

@@ -42,6 +42,9 @@ class TellurideDataTest(absltest.TestCase):
 
     # Create the data object and make sure we have the downloaded archive file.
     rd = regression_data.RegressionDataTelluride4()
+    if not rd.is_data_local(cache_dir):
+      url = 'https://drive.google.com/uc?id=0ByZjGXodIlspWmpBcUhvenVQa1k'
+      rd.download_data(url, cache_dir, debug=True)
     self.assertTrue(rd.is_data_local(cache_dir))
 
     # Now ingest the data, making sure it's not present at start, then present.

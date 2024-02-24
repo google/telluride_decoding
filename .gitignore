@@ -1,1 +1,4 @@
 bazel*
+**.mat
+**.pyc
+notes.txt
