@@ -18,7 +18,7 @@
 # To prevent tkinter errors as per: https://stackoverflow.com/a/37605654
 import os
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import tensorflow as tf  # pylint: disable=g-import-not-at-top
 
 

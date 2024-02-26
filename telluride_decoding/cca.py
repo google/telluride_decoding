@@ -25,7 +25,6 @@ from absl import logging
 import numpy as np
 from telluride_decoding import brain_model
 import tensorflow as tf
-# User should call tf.compat.v1.enable_v2_behavior()
 
 
 def rmss(x):
