@@ -182,6 +182,8 @@ class LinearDiscriminantAnalysis(object):
       x: The input data, a two-dimensional (num_frames x num_dims) np array.
       y: The corresponding class labels (num_frames).
     """
+    assert ~np.sum(~np.isfinite(x))
+    assert ~np.sum(~np.isfinite(y))
     x = self.expand_dims(x)
 
     self._labels = sorted(set(y))
