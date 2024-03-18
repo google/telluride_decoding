@@ -523,6 +523,9 @@ class Decoder(object):
       raise TypeError('Input d1 must be an numpy array, not %s.' % type(d1))
     if not isinstance(d2, np.ndarray):
       raise TypeError('Input d2 must be an numpy array, not %s.' % type(d2))
+    assert np.sum(~np.isfinite(d1)) == 0
+    assert np.sum(~np.isfinite(d2)) == 0
+
     data = np.concatenate((d1, d2), axis=0)
     labels = np.concatenate((1*np.ones(d1.shape[0],),
                              2*np.ones(d2.shape[0],)))
