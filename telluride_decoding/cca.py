@@ -329,6 +329,11 @@ def calculate_cca_parameters_from_dataset(dataset, dim, regularization=0.1,
     num_mini_batches += 1
     if mini_batch_count and num_mini_batches >= mini_batch_count:
       break
+  assert np.sum(~np.isfinite(cov_xx)) == 0
+  assert np.sum(~np.isfinite(cov_yy)) == 0
+  assert np.sum(~np.isfinite(cov_xy)) == 0
+  assert np.sum(~np.isfinite(sum_x)) == 0
+  assert np.sum(~np.isfinite(sum_y)) == 0
   logging.info('Calculating the CCA parameters from %d minibatches',
                num_mini_batches)
   if not num_mini_batches:
@@ -364,6 +369,12 @@ def calculate_cca_parameters_from_dataset(dataset, dim, regularization=0.1,
   rot_x = np.matmul(k11, u[:, 0:dim])
   rot_y = np.matmul(k22, v[:, 0:dim])
   e = e[0:dim]
+
+  assert np.sum(~np.isfinite(rot_x)) == 0
+  assert np.sum(~np.isfinite(rot_y)) == 0
+  assert np.sum(~np.isfinite(mean_x)) == 0
+  assert np.sum(~np.isfinite(mean_y)) == 0
+  assert np.sum(~np.isfinite(e)) == 0
 
   return rot_x, rot_y, mean_x, mean_y, e
 
