@@ -585,7 +585,8 @@ class InferDecoderTest(parameterized.TestCase):
       """Needed to match functions in saved linear model."""
       return x
 
-    test_model_dir = os.path.join(flags.FLAGS.test_srcdir, 
+    # Not sure why I need to add _main to the Bazel path.
+    test_model_dir = os.path.join(flags.FLAGS.test_srcdir, '_main',
                                   'test_data/linear_model')
     # Make sure these files are where they are supposed to be.
     self.assertTrue(os.path.exists(test_model_dir))

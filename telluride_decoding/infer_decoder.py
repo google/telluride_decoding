@@ -306,13 +306,11 @@ class Decoder(object):
     self._mean_x = self._sum_x / self._count
     self._mean_y = self._sum_y / self._count
   
-    # Make sure that sum_x2 >= sum_x ^ 2 (which might not be due to roundoff)
-    self._sum_x2 = np.maximum(self._sum_x2, self._sum_x**2)
-    self._sum_y2 = np.maximum(self._sum_y2, self._sum_y**2)
-
-    self._power = (np.sqrt((self._sum_x2 - self._sum_x**2/self._count) *
-                           (self._sum_y2 - self._sum_y**2/self._count)) /
-                   self._count)
+    # Make sure that we're taking the sqrt of a positive number.  (Could go
+    # negative for silent audio (due to roundoff errors?).
+    term = ((self._sum_x2 - self._sum_x**2/self._count) * 
+            (self._sum_y2 - self._sum_y**2/self._count))
+    self._power = np.sqrt(np.maximum(term, 0.0))/self._count
 
   def compute_correlation(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Computes multidimensional correlation and scaling without the final sum.

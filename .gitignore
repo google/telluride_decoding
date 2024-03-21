@@ -1,4 +1,5 @@
 bazel*
+MODULE*
 **.mat
 **.pyc
 notes.txt
