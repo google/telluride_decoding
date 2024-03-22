@@ -328,7 +328,7 @@ class Decoder(object):
     """
     # From: https://en.wikipedia.org/wiki/Pearson_correlation_coefficient
     assert np.sum(~np.isfinite(self._power)) == 0
-    assert np.sum(self._power <= 0) == 0
+    assert np.sum(self._power <= 0) == 0, f'ComputeCorrelation: Power is {self._power}, and count is {self._power}'
     return ((x - np.broadcast_to(self._mean_x, x.shape)) *
             (y - np.broadcast_to(self._mean_y, y.shape))/ self._power)
 
