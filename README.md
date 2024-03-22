@@ -55,6 +55,9 @@ install the necessary prerequisites:
 pip install telluride-decoding
 ```
 
+This code builds and test with the [Bazel](https://bazel.build/) build software.
+All tests pass on MacOSX as of March 22, 2024.
+
 ## Using this code
 This library is written in Python3 and uses Tensorflow2. The
 decoding code can be run as a standalone program, or as a library, or in 
