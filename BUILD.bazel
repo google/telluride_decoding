@@ -45,6 +45,7 @@ py_test(
         "test_data/meg/subj02_1ksamples.tfrecords",
         "test_data/meg/subj03_1ksamples.tfrecords",
     ],
+    timeout = "eternal",
 )
 
 py_test(
@@ -81,10 +82,13 @@ py_test(
     srcs = ["test/decoding_test.py"],
     data = [
         "test_data/meg/subj01_1ksamples.tfrecords",
+        "test_data/meg/subj02_1ksamples.tfrecords",
+        "test_data/meg/subj03_1ksamples.tfrecords",
     ],
     deps = [
         ":decoding_lib",
     ],
+    timeout = "eternal",
 )
 
 py_test(

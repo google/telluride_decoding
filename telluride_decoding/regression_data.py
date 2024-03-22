@@ -86,7 +86,7 @@ def loadmat(filename):
     # checks if entries in dictionary are mat-objects.
     # If yes todict is called to change them to nested dictionaries.
     for key in key_dict:
-      if isinstance(key_dict[key], spio.matlab.mio5_params.mat_struct):
+      if isinstance(key_dict[key], spio.matlab.mat_struct):
         key_dict[key] = _todict(key_dict[key])
     return key_dict
 
@@ -96,7 +96,7 @@ def loadmat(filename):
     # pylint: disable=protected-access
     for strg in matobj._fieldnames:
       elem = matobj.__dict__[strg]
-      if isinstance(elem, spio.matlab.mio5_params.mat_struct):
+      if isinstance(elem, spio.matlab.mat_struct):
         key_dict[strg] = _todict(elem)
       else:
         key_dict[strg] = elem

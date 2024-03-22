@@ -29,7 +29,8 @@ class CsvUtilTest(absltest.TestCase):
 
   def setUp(self):
     super(CsvUtilTest, self).setUp()
-    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, 'test_data')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, '_main', 
+                                       'test_data')
 
   def test_write_results(self):
     temp_dir = self.create_tempdir().full_path

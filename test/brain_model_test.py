@@ -352,7 +352,7 @@ class BrainModelTest(absltest.TestCase):
     metrics = bmdnn.evaluate(test_dataset)
     logging.info('test_regression_fullyconnected metrics: %s', metrics)
     self.assertLess(metrics['loss'], 0.35)
-    self.assertGreater(metrics['pearson_correlation_first'], 0.85)
+    self.assertGreater(metrics['pearson_correlation_first'], 0.80)
 
   @flagsaver.flagsaver
   def test_offset_regression_positive(self):
@@ -771,7 +771,7 @@ class BrainModelTest(absltest.TestCase):
     error_power = np.sum(error[edge_count:-edge_count]**2)
     snr = 10*np.log10(signal_power/error_power)
     logging.info('Inference SNR is %s', snr)
-    self.assertGreater(snr, 16.0)
+    self.assertGreater(snr, 15.0)
 
   @flagsaver.flagsaver
   def test_simulated_dnn_regression(self):

@@ -17,6 +17,7 @@
 
 """
 import os
+import subprocess
 
 from absl import flags
 from absl.testing import absltest
@@ -89,9 +90,15 @@ class BrainDataTest(absltest.TestCase):
   def setUp(self):
     super(BrainDataTest, self).setUp()
     self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir,
+        flags.FLAGS.test_srcdir, '_main', 
         'test_data/',
         'meg')
+    if not os.path.exists(self._test_data_dir):
+      # Debugging: If not here, where.
+      subprocess.run(['ls', flags.FLAGS.test_srcdir])
+      subprocess.run(['ls', os.path.join(flags.FLAGS.test_srcdir, '_main')])
+      self.assertTrue(os.path.exists(self._test_data_dir),
+                      f'Test data dir does not exist: {self._test_data_dir}')
 
   ################## Linear data for testing ################################
   # Just a list of consecutive integers, to make it easier to debug batching

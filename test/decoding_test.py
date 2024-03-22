@@ -44,7 +44,7 @@ class DecodingTest(absltest.TestCase):
     self.model_flags = decoding.DecodingOptions().set_flags()
     self.fs = 100  # Audio and EEG sample rate in Hz
     self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, 'test_data', 'meg')
+        flags.FLAGS.test_srcdir, '_main', 'test_data', 'meg')
 
   def clear_model(self, model_dir='/tmp/tf'):
     try:
@@ -341,13 +341,14 @@ class DecodingTest(absltest.TestCase):
     Make sure we find all the files, and it is all good.
     """
     self.model_flags.tfexample_dir = os.path.join(
-        flags.FLAGS.test_srcdir, 
+        flags.FLAGS.test_srcdir, '_main',
         'test_data')
     self.model_flags.check_file_pattern = True
 
     mock_stdout = io.StringIO()
     with mock.patch('sys.stdout', mock_stdout):
       decoding.run_decoding_experiment(self.model_flags)
+    logging.info(f'test_main_check_files returned: {mock_stdout.getvalue()}')
     self.assertIn('Found 3 files for TFExample data analysis.',
                   mock_stdout.getvalue())
 
@@ -358,7 +359,7 @@ class DecodingTest(absltest.TestCase):
     Make sure the code runs without exceptions, as other tests do the parts.
     """
     self.model_flags.tfexample_dir = os.path.join(
-        flags.FLAGS.test_srcdir, 'test_data/')
+        flags.FLAGS.test_srcdir, '_main', 'test_data')
     tensorboard_dir = os.path.join(os.environ.get('TMPDIR') or '/tmp',
                                    'tensorboard')
     self.model_flags.tensorboard_dir = tensorboard_dir

@@ -668,15 +668,30 @@ class TFExampleData(BrainData):
                       (type(self.data_dir), self.data_dir))
     self._cached_file_names = []
     exp_data_dir = self.data_dir
-    for (path, _, files) in tf.io.gfile.walk(exp_data_dir):
-      # pylint: disable=g-complex-comprehension
-      self._cached_file_names += [
-          os.path.join(path, f)
-          for f in files
-          if (f.endswith('.tfrecords') and
-              '-bad-' not in f and
+
+    def on_error(e):
+      """Ignore errors.  It seems the Mac's tmpdir contains some directories
+      that can't be walked."""
+      logging.info(f'Walk error: {e}')
+
+    def good_file(f):
+      return (f.endswith('.tfrecords') and 
+              '-bad-' not in f and 
               self.data_pattern in f)
-      ]
+
+    try:
+      for (path, _, files) in tf.io.gfile.walk(exp_data_dir, onerror=on_error):
+        self._cached_file_names += [
+            os.path.join(path, f)
+            for f in files if good_file(f)
+        ]
+    except:
+      # The tf.io.gfile.walk fails on Mac with a temporary directory.
+      for (path, _, files) in os.walk(exp_data_dir, onerror=on_error):
+        self._cached_file_names += [
+            os.path.join(path, f)
+            for f in files if good_file(f)
+        ]
     logging.info('_get_data_file_names found %d files for TFExample data '
                  'analysis.', len(self._cached_file_names))
     if not self._cached_file_names:
