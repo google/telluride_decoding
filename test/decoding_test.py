@@ -34,7 +34,7 @@ from telluride_decoding import decoding
 from telluride_decoding import infer_decoder
 from telluride_decoding.brain_data import TestBrainData
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 class DecodingTest(absltest.TestCase):
@@ -44,9 +44,7 @@ class DecodingTest(absltest.TestCase):
     self.model_flags = decoding.DecodingOptions().set_flags()
     self.fs = 100  # Audio and EEG sample rate in Hz
     self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/',
-        'meg')
+        flags.FLAGS.test_srcdir, '_main', 'test_data', 'meg')
 
   def clear_model(self, model_dir='/tmp/tf'):
     try:
@@ -343,14 +341,15 @@ class DecodingTest(absltest.TestCase):
     Make sure we find all the files, and it is all good.
     """
     self.model_flags.tfexample_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+        flags.FLAGS.test_srcdir, '_main',
+        'test_data')
     self.model_flags.check_file_pattern = True
 
     mock_stdout = io.StringIO()
     with mock.patch('sys.stdout', mock_stdout):
       decoding.run_decoding_experiment(self.model_flags)
-    self.assertIn('Found 1 files for TFExample data analysis.',
+    logging.info(f'test_main_check_files returned: {mock_stdout.getvalue()}')
+    self.assertIn('Found 3 files for TFExample data analysis.',
                   mock_stdout.getvalue())
 
   @flagsaver.flagsaver
@@ -360,8 +359,7 @@ class DecodingTest(absltest.TestCase):
     Make sure the code runs without exceptions, as other tests do the parts.
     """
     self.model_flags.tfexample_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+        flags.FLAGS.test_srcdir, '_main', 'test_data')
     tensorboard_dir = os.path.join(os.environ.get('TMPDIR') or '/tmp',
                                    'tensorboard')
     self.model_flags.tensorboard_dir = tensorboard_dir
@@ -411,5 +409,4 @@ class DecodingTest(absltest.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

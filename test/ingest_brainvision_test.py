@@ -27,9 +27,8 @@ class IngestBrainVisionTest(absltest.TestCase):
 
   def setUp(self):
     super(IngestBrainVisionTest, self).setUp()
-    self._test_data = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_data = os.path.join(flags.FLAGS.test_srcdir, '_main', 
+                                   'test_data')
 
   def test_read_bv_file(self):
     header_filename = os.path.join(self._test_data, 'brainvision_test.vhdr')

@@ -24,11 +24,9 @@ import collections
 import csv
 import os
 import numpy as np
+import tensorflow as tf
 
 from telluride_decoding import plot_util
-
-import tensorflow.compat.v2 as tf
-# User should call tf.compat.v1.enable_v2_behavior()
 
 
 def write_results(file_name, regularization_list, all_results):

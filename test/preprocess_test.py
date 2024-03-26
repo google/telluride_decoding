@@ -22,7 +22,7 @@ import numpy as np
 import scipy
 from telluride_decoding import preprocess
 from telluride_decoding.brain_data import TestBrainData
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 class PreprocessTest(parameterized.TestCase):
@@ -334,5 +334,4 @@ class PreprocessTest(parameterized.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

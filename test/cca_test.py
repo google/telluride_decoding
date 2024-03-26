@@ -27,7 +27,7 @@ import numpy as np
 
 from telluride_decoding import brain_data
 from telluride_decoding import cca
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 flags.DEFINE_bool('random_mixup_batch',
@@ -280,5 +280,4 @@ class CcaTest(parameterized.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

@@ -17,6 +17,7 @@
 
 """
 import os
+import subprocess
 
 from absl import flags
 from absl.testing import absltest
@@ -32,7 +33,7 @@ from telluride_decoding.brain_data import mismatch_batch_randomization
 from telluride_decoding.brain_data import TestBrainData
 from telluride_decoding.brain_data import TFExampleData
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 # These flags are defined in decoding.py, but we add them here so we can test
@@ -89,9 +90,15 @@ class BrainDataTest(absltest.TestCase):
   def setUp(self):
     super(BrainDataTest, self).setUp()
     self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
+        flags.FLAGS.test_srcdir, '_main', 
         'test_data/',
         'meg')
+    if not os.path.exists(self._test_data_dir):
+      # Debugging: If not here, where.
+      subprocess.run(['ls', flags.FLAGS.test_srcdir])
+      subprocess.run(['ls', os.path.join(flags.FLAGS.test_srcdir, '_main')])
+      self.assertTrue(os.path.exists(self._test_data_dir),
+                      f'Test data dir does not exist: {self._test_data_dir}')
 
   ################## Linear data for testing ################################
   # Just a list of consecutive integers, to make it easier to debug batching
@@ -879,5 +886,4 @@ class BrainDataTest(absltest.TestCase):
     self.assertEqual(filtered, ['subj01_1ksamples.tfrecords'])
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

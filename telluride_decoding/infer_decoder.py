@@ -305,9 +305,12 @@ class Decoder(object):
     # Update the means and power so they are ready for use.
     self._mean_x = self._sum_x / self._count
     self._mean_y = self._sum_y / self._count
-    self._power = (np.sqrt((self._sum_x2 - self._sum_x**2/self._count) *
-                           (self._sum_y2 - self._sum_y**2/self._count)) /
-                   self._count)
+  
+    # Make sure that we're taking the sqrt of a positive number.  (Could go
+    # negative for silent audio (due to roundoff errors?).
+    term = ((self._sum_x2 - self._sum_x**2/self._count) * 
+            (self._sum_y2 - self._sum_y**2/self._count))
+    self._power = np.sqrt(np.maximum(term, 0.0))/self._count
 
   def compute_correlation(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Computes multidimensional correlation and scaling without the final sum.
@@ -324,6 +327,8 @@ class Decoder(object):
       The normalized cross product (num_frames x num_features).
     """
     # From: https://en.wikipedia.org/wiki/Pearson_correlation_coefficient
+    assert np.sum(~np.isfinite(self._power)) == 0
+    assert np.sum(self._power <= 0) == 0, f'ComputeCorrelation: Power is {self._power}, and count is {self._count}'
     return ((x - np.broadcast_to(self._mean_x, x.shape)) *
             (y - np.broadcast_to(self._mean_y, y.shape))/ self._power)
 
@@ -523,6 +528,9 @@ class Decoder(object):
       raise TypeError('Input d1 must be an numpy array, not %s.' % type(d1))
     if not isinstance(d2, np.ndarray):
       raise TypeError('Input d2 must be an numpy array, not %s.' % type(d2))
+    assert np.sum(~np.isfinite(d1)) == 0
+    assert np.sum(~np.isfinite(d2)) == 0
+
     data = np.concatenate((d1, d2), axis=0)
     labels = np.concatenate((1*np.ones(d1.shape[0],),
                              2*np.ones(d2.shape[0],)))
