@@ -279,7 +279,7 @@ class BrainData(object):
     if not isinstance(filename_list, list):
       raise TypeError('Filename_list is a %s, not a list.' %
                       type(filename_list))
-    logging.info('Filter_file_names: filename_list: %s', filename_list)
+    logging.info('Filter_file_names: All files to consider: %s', filename_list)
     logging.info('Filter_file_names: train_file_pattern: %s',
                  self.train_file_pattern)
     logging.info('Filter_file_names: validate_file_pattern: %s',
@@ -440,11 +440,11 @@ class BrainData(object):
         A tf.dataset with shape N' x (pre_context+1+post_context)*C, where N' is
         shortened to account for the frames where there is not enough context.
       """
-      logging.info(' Window_one_stream: adding %d and %d frames of context '
-                   'to stream.', pre_context, post_context)
-      total_context = pre_context + 1 + post_context
       channels = x.shape[1]
-      logging.info(' Window_one_stream: %s channels.', channels)
+      logging.info(f'Window_one_stream: adding {pre_context} before '
+                   f'and {post_context} after frames of context to stream'
+                   f' with {channels} channels')
+      total_context = pre_context + 1 + post_context
       padded_x = tf.concat((tf.zeros((pre_context, channels), dtype=x.dtype),
                             x,
                             tf.zeros((post_context, channels),

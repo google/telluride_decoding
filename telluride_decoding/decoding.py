@@ -469,8 +469,8 @@ def train_lda_model(brain_dataset: brain_data.BrainData,
     raise TypeError('Train_lda_model needs a DecodingOptions object, not %s.' %
                     type(my_flags))
 
+  # Get two copies of the dataset, one regular and one mixed up for comparison.
   attended_data = brain_dataset.create_dataset('test', mixup_batch=False)
-
   unattended_data = brain_dataset.create_dataset('test', mixup_batch=True)
 
   decoder = infer_decoder.create_decoder(my_flags.dnn_regressor,
