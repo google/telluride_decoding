@@ -18,7 +18,7 @@
 More to come.. the CCA functions need to get the Pearson correlation too.
 """
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 # TODO Check to see if we can use (might need to get into core)
 # contrib/streaming_pearson_correlation

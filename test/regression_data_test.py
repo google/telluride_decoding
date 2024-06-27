@@ -16,6 +16,7 @@
 """Test for telluride_decoding.regression_data."""
 
 import os
+import subprocess
 
 from absl import flags
 from absl.testing import absltest
@@ -23,7 +24,7 @@ from absl.testing import absltest
 from telluride_decoding import brain_data
 from telluride_decoding import regression_data
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 # Note these tests do NOT test the data download cdoe.  These are hard to test,
 # only run occasionally, and are obvious when they don't work in real use.
@@ -33,9 +34,14 @@ class TellurideDataTest(absltest.TestCase):
 
   def setUp(self):
     super(TellurideDataTest, self).setUp()
-    self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, '_main',
+                                       'test_data')
+    if not os.path.exists(self._test_data_dir):
+      # Debugging: If not here, where.
+      subprocess.run(['ls', flags.FLAGS.test_srcdir])
+      subprocess.run(['ls', os.path.join(flags.FLAGS.test_srcdir, '_main')])
+      self.assertTrue(os.path.exists(self._test_dir),
+                      f'Test data dir does not exist: {self._test_dir}')
 
   def test_data_ingestion(self):
     cache_dir = os.path.join(self._test_data_dir, 'telluride4')
@@ -44,6 +50,9 @@ class TellurideDataTest(absltest.TestCase):
 
     # Create the data object and make sure we have the downloaded archive file.
     rd = regression_data.RegressionDataTelluride4()
+    if not rd.is_data_local(cache_dir):
+      url = 'https://drive.google.com/uc?id=0ByZjGXodIlspWmpBcUhvenVQa1k'
+      rd.download_data(url, cache_dir, debug=True)
     self.assertTrue(rd.is_data_local(cache_dir))
 
     # Now ingest the data, making sure it's not present at start, then present.
@@ -67,9 +76,8 @@ class JensMemoryDataTest(absltest.TestCase):
 
   def setUp(self):
     super(JensMemoryDataTest, self).setUp()
-    self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, '_main', 
+                                       'test_data')
 
   def test_data_ingestion(self):
     cache_dir = os.path.join(self._test_data_dir, 'jens_memory')
@@ -80,6 +88,9 @@ class JensMemoryDataTest(absltest.TestCase):
 
     # Create the data object and make sure we have the downloaded archive file.
     rd = regression_data.RegressionDataJensMemory()
+    subprocess.run(['ls', flags.FLAGS.test_srcdir])
+    subprocess.run(['ls', self._test_data_dir])
+    subprocess.run(['ls', cache_dir])
     self.assertTrue(rd.is_data_local(cache_dir, num_subjects))
 
     # Now ingest the data, making sure it's not present at start, then present.
@@ -99,5 +110,4 @@ class JensMemoryDataTest(absltest.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

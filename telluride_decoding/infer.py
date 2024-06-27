@@ -32,7 +32,7 @@ import matplotlib
 # The next change breaks colab, so add "%matplotlib inline" after importing
 # this file.
 # pylint: disable=g-import-not-at-top
-matplotlib.use('Agg')    # Needed for plotting to a file, before the next import
+# matplotlib.use('Agg')    # Needed for plotting to a file, before the next import
 import matplotlib.pyplot as plt
 
 import numpy as np

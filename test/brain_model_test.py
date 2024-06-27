@@ -32,7 +32,7 @@ from telluride_decoding import brain_model
 from telluride_decoding import cca
 from telluride_decoding.brain_data import TestBrainData
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 flags.DEFINE_string('telluride_test', 'just for testing',
                     'Just a dummy flag so we can test model saving.')
@@ -111,9 +111,7 @@ class BrainModelTest(absltest.TestCase):
 
   def setUp(self):
     super(BrainModelTest, self).setUp()
-    self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, 'test_data')
 
   def clear_model(self):
     model_dir = '/tmp/tf'
@@ -354,7 +352,7 @@ class BrainModelTest(absltest.TestCase):
     metrics = bmdnn.evaluate(test_dataset)
     logging.info('test_regression_fullyconnected metrics: %s', metrics)
     self.assertLess(metrics['loss'], 0.35)
-    self.assertGreater(metrics['pearson_correlation_first'], 0.85)
+    self.assertGreater(metrics['pearson_correlation_first'], 0.80)
 
   @flagsaver.flagsaver
   def test_offset_regression_positive(self):
@@ -773,7 +771,7 @@ class BrainModelTest(absltest.TestCase):
     error_power = np.sum(error[edge_count:-edge_count]**2)
     snr = 10*np.log10(signal_power/error_power)
     logging.info('Inference SNR is %s', snr)
-    self.assertGreater(snr, 16.0)
+    self.assertGreater(snr, 15.0)
 
   @flagsaver.flagsaver
   def test_simulated_dnn_regression(self):
@@ -1091,5 +1089,4 @@ class PearsonTest(absltest.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

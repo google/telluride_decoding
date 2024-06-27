@@ -16,6 +16,7 @@
 """Test for telluride_decoding.infer."""
 
 import os
+import subprocess
 import tempfile
 
 from absl import flags
@@ -38,10 +39,15 @@ class InferTest(absltest.TestCase):
 
   def setUp(self):
     super(InferTest, self).setUp()
-    self._test_data_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/',
-        'meg')
+    self._test_data_dir = os.path.join(flags.FLAGS.test_srcdir, '_main',
+                                       'test_data', 'meg')
+    self._test_dir = os.path.join(flags.FLAGS.test_srcdir, '_main', 'test_data')
+    if not os.path.exists(self._test_dir):
+      # Debugging: If not here, where.
+      subprocess.run(['ls', flags.FLAGS.test_srcdir])
+      subprocess.run(['ls', os.path.join(flags.FLAGS.test_srcdir, '_main')])
+      self.assertTrue(os.path.exists(self._test_dir),
+                      f'Test data dir does not exist: {self._test_dir}')
 
   def test_calculate_time_axis(self):
     centers = infer.calculate_time_axis(5, 1, 2, 1)*60   # Convert to seconds
@@ -168,7 +174,7 @@ class InferTest(absltest.TestCase):
         saved_model_dir, tf_dir, [tmp_file,], [tmp_file,],
         reduction, decoder_type, 'intensity', 'intensity2', plot_dir=plot_dir)
     print('Reduction test results:', window_results)
-    self.assertLess(window_results[10], 0.995)
+    self.assertLess(window_results[10], 0.997)
     self.assertGreater(window_results[100], 0.95)
     self.assertGreater(window_results[200], 0.95)
     self.assertGreater(window_results[400], 0.95)

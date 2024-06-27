@@ -22,7 +22,7 @@ import numpy as np
 import scipy
 from telluride_decoding import preprocess
 from telluride_decoding.brain_data import TestBrainData
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 class PreprocessTest(parameterized.TestCase):
@@ -171,7 +171,7 @@ class PreprocessTest(parameterized.TestCase):
     channel_numbers = '1,3,42,23,30-33'
     p = preprocess.Preprocessor('test', fs_in, fs_out,
                                 channel_numbers=channel_numbers)
-    self.assertEqual(p._channel_numbers, [1, 3, 23, 30, 31, 32, 33, 42])
+    self.assertEqual(p.channel_numbers, [1, 3, 23, 30, 31, 32, 33, 42])
 
   def test_channel_selection(self):
     """Test the channel selecting parsing code."""
@@ -215,6 +215,27 @@ class PreprocessTest(parameterized.TestCase):
     np.testing.assert_array_less(np.abs(output_data[100:, -1]), 0.01)
     self.assertEqual(output_data.shape[1], 8)
 
+  def test_decimation(self):
+    """Test the decimation code.
+    """
+    data = np.reshape(np.arange(100), (-1, 1))
+    factor = 3  # How much to decimate input data by
+    p = preprocess.Preprocessor('decimation', fs_in=16, fs_out=16, 
+                                decimate=factor)
+    start_frame = 0
+    num_frames_to_process = 3
+    results = []
+    while start_frame < data.shape[0]:
+      results.append(p.process(data[start_frame:
+                                    start_frame+num_frames_to_process]))
+      start_frame += num_frames_to_process
+
+    results = np.concatenate(results, axis=0)
+    np.testing.assert_equal(results, 
+                            np.reshape(np.arange(0, data.shape[0], factor,
+                                                 dtype=float),
+                                       (-1, 1)))
+
   def test_processing_add_context(self):
     """Test case for adding context as we would in live data.
 
@@ -244,8 +265,6 @@ class PreprocessTest(parameterized.TestCase):
       context_filled_data = p.add_context(input_data)
       self.assertEqual(context_filled_data.shape[1],
                        num_features * total_context)
-      print(input_data.shape)
-      print(context_filled_data.shape)
       c_out = np.concatenate([c_out, context_filled_data], axis=0)
     np.testing.assert_array_equal(c_out[pre_context, :],
                                   all_data[:total_context, :].flatten())
@@ -271,20 +290,19 @@ class PreprocessTest(parameterized.TestCase):
     fs_in = 100.0
     fs_out = 100.0
     feature_name = 'eeg'
-    param_dict = {'channel_numbers': '2',
+    param_dict = {'channel_numbers': 2,
                   'highpass_order': 6,
                   'highpass_cutoff': 42,
                  }
     param_list = ['{}={}'.format(k, param_dict[k]) for k in param_dict]
     name_string = '{}({})'.format(feature_name, ';'.join(param_list))
-    print('test_parsing Preprocessor(%s, %g)' % (name_string, fs_in))
     p = preprocess.Preprocessor(name_string, fs_in, fs_out)
-    print('test_parsing:', p)
     self.assertIn(feature_name, str(p))
     for k, v in param_dict.items():
-      if k == 'channel_numbers':
-        v = '%s' % param_dict['channel_numbers']
-      self.assertIn('{}={}'.format(k, v), str(p))
+      if k in ['channel_numbers', 'ref_channels', 'channels_to_ref']:
+        self.assertEqual([[2]], getattr(p, f'_{k}'))
+      else:
+        self.assertEqual(v, getattr(p, f'_{k}'), f'Wrong value {v} for {k}')
 
   def test_audio_intensity(self):
     fs_in = 16000  # Samples per second
@@ -332,7 +350,127 @@ class PreprocessTest(parameterized.TestCase):
     self.assertEqual(np.argmax(spectrogram[:, 125]),
                      round(f0/(fs_in/(n_trans*segment_size))))
 
+  def test_init_from_string(self):
+    params = {'lowpass_cutoff': 2,
+              'lowpass_order': 4}
+    fs = 16000
+    param_string = ';'.join([f'{k}={params[k]}' for k in params])
+    p = preprocess.Preprocessor(f'test({param_string})', fs, fs)
+
+    self.assertEqual(p.name, 'test')
+    # Now make sure all the parameters we specified are correctly set in the
+    # object.
+    for k in params:
+      self.assertEqual(getattr(p, f'_{k}'), params[k])
+
+  def test_all(self):
+    """A test which shows how to use this class to preprocess data.
+    Load three signals: a ground (sine wave), a signal with two components,
+    and an impulse.  Then specify the reference channel (the ground) and lowpass
+    filter at 2Hz to see the response."""
+    fs = 32
+    total_frames = 100*fs
+    num_dims = 3
+
+    f1 = 0.5
+    f2 = 1
+    f3 = 2
+    signals = np.zeros((total_frames, num_dims))
+    t = np.arange(total_frames)/fs
+
+    signals[:, 0] = np.sin(t*2*np.pi*f1)
+    signals[:, 1] = signals[:, 0] + np.sin(t*2*np.pi*f2) + np.sin(t*2*np.pi*f3)
+    signals[2, 2] += 1  # Impulse, but not at zero, to avoid startup problems.
+    
+    p =  preprocess.Preprocessor('test(ref_channels=0;channels_to_ref=1;' 
+                                 f'lowpass_cutoff={f2};lowpass_order=2)', 
+                                 fs, fs)
+    
+    frames_sent = 0
+    result_data = []
+    while frames_sent < total_frames:
+      # Process 5 frames at a time, to make sure we don't have problems for
+      # arbitrary block processing sizes.
+      num = min(5, total_frames - frames_sent) 
+      result = p.process(signals[frames_sent: frames_sent+num, :])
+      result_data.append(result)
+      frames_sent += num
+
+    # Assemble all the results to compute the resulting spectrum for testing
+    results = np.concatenate(result_data, axis=0)
+
+    freqs = np.fft.fftfreq(total_frames)*fs
+    def find_freq(freqs: np.ndarray, f: float):
+      """Find the array index corresponding to the desired frequency.
+      Args:
+        freqs: The frequency of each (FFT) bin
+        f: The desired frequency
+      Returns:
+        The bin number that best corresponds to the desired (FFT) Frequency
+      """
+      i = np.argmin((freqs-f)**2)
+      print(f'Freq {f} is in bin {i} which corresponds to {freqs[i]}Hz')
+      return i
+    f1_index = find_freq(freqs, f1)
+    f2_index = find_freq(freqs, f2)
+    f3_index = find_freq(freqs, f3)
+    f4_index = find_freq(freqs, 2*f3)
+
+    freq_resp = 20*np.log10(np.abs(np.fft.fft(results, axis=0)))
+    freq_resp = freq_resp[:total_frames//2, :]    # Keep positive freqs only
+    # Normalize the maximum of each channel's frequency response
+    freq_resp -= np.max(freq_resp, axis=0)
+      
+    if False:
+      with open('/tmp/filter_resp.txt', 'w') as fp:
+        for i in range(results.shape[0]):
+          print(f'{i} {results[i, 0]}, {results[i,1]}, {results[i, 2]}', 
+                file=fp)
+
+      with open('/tmp/freq_resp.txt', 'w') as fp:
+        for i in range(freq_resp.shape[0]):
+          print(f'{i} {freqs[i]}Hz: {freq_resp[i, 0]}, {freq_resp[i,1]}, '
+                f'{freq_resp[i, 2]}', 
+                file=fp)
+
+    with tf.io.gfile.GFile('/tmp/test_full_response.png', mode='w') as fp:
+      # Plot the preprocessor output, in the time domain
+      plt.clf()
+      plt.plot(results[:200, :])
+      plt.savefig(fp)
+
+    with tf.io.gfile.GFile('/tmp/test_full_spectrum.png', mode='w') as fp:
+      # Plot the frequency spectrum of each processed signal.
+      plt.clf()
+      plt.semilogx(freqs[:total_frames//2], freq_resp[:total_frames//2, :])
+      plt.ylim([-80, 0])
+      plt.plot(f2, -3.02, 'x')
+      plt.xlabel('Frequency (Hz)')
+      plt.ylabel('Response (dB)')
+      plt.grid(True, which='both')
+      plt.title(f'{f2}Hz Losspass Filter Test')
+      plt.legend(('Reference (Gnd)', 'Filtered Signal', 'Impulse Response'))
+      plt.savefig(fp)
+
+    # Make sure that ground signal (at f1 Hz) is there, an impulse at f1 bin
+    self.assertAlmostEqual(freq_resp[f1_index, 0], 0.00, 0.01)
+    # Make sure rest of groound signal is zero (after zeroing out the f1 component)
+    freq_resp[f1_index, 0] = -100
+    np.testing.assert_array_less(freq_resp[:, 0], -40)
+
+    # Make sure that the peak in the main EEG signal (channel 1) is there
+    self.assertAlmostEqual(freq_resp[f2_index, 1], 0)
+    freq_resp[f2_index, 1] = -100
+    self.assertGreater(freq_resp[f3_index, 1], -10)
+    freq_resp[f3_index, 1] = -100
+    np.testing.assert_array_less(freq_resp[:, 1], -40)
+
+    # Make sure the filter's frequency response from the impulse dies out as 
+    # expected, 3dB at the filter's desired frequency, and then 12dB per octave.
+    self.assertAlmostEqual(freq_resp[f2_index, 2], -3.01, places=2)
+    # Expect 12dB per octave fall off.
+    self.assertAlmostEqual(freq_resp[f3_index, 2], -12.46, places=2)
+
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

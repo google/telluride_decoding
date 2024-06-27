@@ -1,6 +1,7 @@
 # The telluride_decoding Library
 
-(This is not an official Google product!)
+[This is a fork of the original project, as Google is no longer 
+contributing to this project. This should be consided the official version.]
 
 This repository contains Python/Tensorflow code to decode perceptual signals
 from brain data.  The perceptual signals we are using are generally audio
@@ -54,6 +55,9 @@ install the necessary prerequisites:
 ```
 pip install telluride-decoding
 ```
+
+This code builds and test with the [Bazel](https://bazel.build/) build software.
+All tests pass on MacOSX as of March 22, 2024.
 
 ## Using this code
 This library is written in Python3 and uses Tensorflow2. The

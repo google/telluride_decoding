@@ -28,7 +28,7 @@ from absl.testing import flagsaver
 import numpy as np
 from telluride_decoding import decoding
 from telluride_decoding import regression
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
@@ -85,5 +85,4 @@ class RegressionTest(absltest.TestCase):
     return all_files
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

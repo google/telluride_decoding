@@ -25,6 +25,7 @@ executed in the following order:
   3. re-referencing
   4. channel selection
   4. normalization
+  5. decimation (be sure LPF is sufficiently low to prevent aliasing)
   5. temporal context addition
 
 Note, resampling should only be used for offline analysis. Other functions like
@@ -47,6 +48,7 @@ from absl import flags
 from absl import logging
 import numpy as np
 import scipy.signal
+from typing import List, Optional
 
 FLAGS = flags.FLAGS
 
@@ -73,6 +75,8 @@ class Preprocessor(object):
     channel_numbers: A list or string of channels to be retained.
     data_mean: A float containing the value to be used for demeaning.
     data_std: A float containing the value to be used for normalization.
+    decimate: An integer representing how much to decimate before adding
+      context,  Defaults to 1 (no decimation).
     pre_context: An integer specifying the pre-stimulus lags in samples.
     post_context: An integer specifying the post-stimulus lags in samples.
   """
@@ -91,32 +95,49 @@ class Preprocessor(object):
                channel_numbers=None,
                data_mean=0,
                data_std=1,
+               decimate=1,
                pre_context=0,
                post_context=0):
     """Specifies desired parameters up front.  Enter 0 or None to disable."""
     self.check_params(name, fs_in, fs_out, highpass_cutoff, highpass_order,
                       lowpass_cutoff, lowpass_order, ref_channels,
-                      channels_to_ref, channel_numbers, data_std, pre_context,
-                      post_context)
+                      channels_to_ref, channel_numbers, data_std, decimate, 
+                      pre_context, post_context)
     self._fs_in = fs_in
-    if '(' in name:
-      self.init_from_string(fs_in, name)
-    self._name = name
     self._fs_out = fs_out
-    self.init_highpass(highpass_cutoff, highpass_order)
-    self.init_lowpass(lowpass_cutoff, lowpass_order)
-    self._ref_channels = ref_channels
-    self._channels_to_ref = channels_to_ref
-    self.init_channel_numbers(channel_numbers)
+    self._name = name
+    self._lowpass_cutoff = lowpass_cutoff
+    self._lowpass_order = lowpass_order
+    self._highpass_cutoff = highpass_cutoff
+    self._highpass_order = highpass_order
+    self._ref_channels = self.parse_channel_numbers(ref_channels)
+    self._channels_to_ref = self.parse_channel_numbers(channels_to_ref)
+    self._channel_numbers = self.parse_channel_numbers(channel_numbers)
     self._data_mean = data_mean
     self._data_std = data_std
+    self._decimate = decimate
+    self._start_decimation = 0
     self._pre_context = pre_context
     self._post_context = post_context
     self.context_reset()
     self._next_frame_idx = 0
+    assert isinstance(self._ref_channels, list)
+    assert isinstance(self._channels_to_ref, list)
+    assert isinstance(self._channel_numbers, list)
+    
+    # If parameter string specified, reset all parameters based on this string.
+    if '(' in name:
+      self.init_from_string(name)
+    
+    # Finally design the filters, if necessary
+    self.init_highpass(self._highpass_cutoff, self._highpass_order)
+    self.init_lowpass(self._lowpass_cutoff, self._lowpass_order)
 
+  # ToDo(malcolm): Refactor assuming params are already in the object.
   def init_highpass(self, highpass_cutoff, highpass_order):
     """Initializes the high-pass filter coefficients."""
+    self._highpass_cutoff = highpass_cutoff
+    self._highpass_order = highpass_order
     if highpass_cutoff > 0:
       self._highpass_cutoff = highpass_cutoff
       self._highpass_order = highpass_order
@@ -131,6 +152,8 @@ class Preprocessor(object):
 
   def init_lowpass(self, lowpass_cutoff, lowpass_order):
     """Initializes the low-pass filter coefficients."""
+    self._lowpass_cutoff = lowpass_cutoff
+    self._lowpass_order = lowpass_order
     if lowpass_cutoff > 0 or self._fs_out < self._fs_in:
       nyquist = self._fs_out / 2
       if lowpass_cutoff > nyquist or (self._fs_out < self._fs_in and
@@ -139,8 +162,6 @@ class Preprocessor(object):
         lowpass_order = 10
         print('Using %gHz low-pass filter to prevent aliasing'
               % lowpass_cutoff)
-      self._lowpass_cutoff = lowpass_cutoff
-      self._lowpass_order = lowpass_order
       logging.info('Low-pass filtering the data with the 3dB point at %gHz.',
                    lowpass_cutoff)
       self._lowpass_sos = scipy.signal.butter(lowpass_order, lowpass_cutoff,
@@ -149,13 +170,15 @@ class Preprocessor(object):
     else:
       self._lowpass_sos = None
 
-  def init_channel_numbers(self, channel_numbers):
-    """Parses the channel specification string."""
+  def parse_channel_numbers(self, channel_numbers) -> List[int]:
+    """Parses the channel specification string. This routing just parses
+    a list of channels, but the full channel specs mandate a list fo lists.
+    So this just returns a list containing a single list."""
     if isinstance(channel_numbers, int):
-      self._channel_numbers = [channel_numbers]
+      channel_numbers = [channel_numbers]
 
     elif isinstance(channel_numbers, list):
-      self._channel_numbers = channel_numbers
+      channel_numbers = channel_numbers
 
     elif isinstance(channel_numbers, str):
       if ',' in channel_numbers:
@@ -176,10 +199,10 @@ class Preprocessor(object):
       # Squash list of lists to a 1-D numpy array.
       channel_numbers = np.concatenate([expand_number_range(r) for r
                                         in channel_numbers])
-      self._channel_numbers = np.unique(channel_numbers).tolist()
-      print('channel numbers: ', self._channel_numbers)
+      channel_numbers = np.unique(channel_numbers).tolist()
     else:
-      self._channel_numbers = None
+      channel_numbers = []
+    return channel_numbers
 
   @property
   def name(self):
@@ -230,6 +253,10 @@ class Preprocessor(object):
     return self._data_std
 
   @property
+  def decimate(self):
+    return self._decimate
+
+  @property
   def pre_context(self):
     return self._pre_context
 
@@ -241,16 +268,19 @@ class Preprocessor(object):
     return ('Preprocessor(name={}, fs_in={}, fs_out={}, highpass_cutoff={}, ' +
             'highpass_order={}, lowpass_cutoff={}, lowpass_order={}, ' +
             'ref_channels={}, channels_to_ref={}, channel_numbers={} ' +
-            'data_mean={}, data_std={}, pre_context={}, post_context={})'
+            'data_mean={}, data_std={}, decimate={}, pre_context={}, ' +
+            'post_context={})'
            ).format(self.name, self.fs_in, self.fs_out, self.highpass_cutoff,
-                    self.highpass_order, self.highpass_cutoff,
-                    self.highpass_order, self._ref_channels,
+                    self.highpass_order, self.lowpass_cutoff,
+                    self.lowpass_order, self._ref_channels,
                     self.channels_to_ref, self.channel_numbers, self.data_mean,
-                    self.data_std, self.pre_context, self.post_context)
+                    self.data_std, self._decimate, 
+                    self.pre_context, self.post_context)
 
   def check_params(self, name, fs_in, fs_out, highpass_cutoff, highpass_order,
                    lowpass_cutoff, lowpass_order, ref_channels, channels_to_ref,
-                   channel_numbers, data_std, pre_context, post_context):
+                   channel_numbers, data_std, decimate, 
+                   pre_context, post_context):
     """Checks correctness of parameters passed as input."""
     if not isinstance(name, str):
       raise TypeError('name must be a string, not %s' % name)
@@ -272,9 +302,12 @@ class Preprocessor(object):
       raise ValueError('channels_to_ref must be a list.')
     if not isinstance(channel_numbers, (list, str)) \
     and channel_numbers is not None:
-      raise ValueError('c    hannel_numbers must be a list.')
+      raise ValueError('channel_numbers must be a list.')
     if data_std <= 0:
       raise ValueError('data_std must be greater than 0.')
+    if decimate < 1 or not isinstance(decimate, int):
+      raise ValueError('decimate must be an integer >= 1, not '
+                       f'{decimate} of type {type(decimate)}')
     if pre_context < 0:
       raise ValueError('pre_context should not be less than 0.')
     if post_context < 0:
@@ -484,6 +517,14 @@ class Preprocessor(object):
                  shift_amt, :]
     return result
 
+  def decimate_data(self, data):
+    if self._decimate > 1:
+      d = data[self._start_decimation: : self._decimate]
+      self._start_decimation += data.shape[0]
+      self._start_decimation %= self._decimate
+      return d
+    return data
+
   def add_context(self, data):
     """Add pre and post temporal context to data.
 
@@ -544,16 +585,18 @@ class Preprocessor(object):
     data = self.reref_data(data)
     data = self.select_channels(data)
     data = self.normalize_data(data)
+    data = self.decimate_data(data)
     data = self.add_context(data)
     return data
 
-  def init_from_string(self, fs_in, param_string):
+  def init_from_string(self, param_string):
     """Initializes this object from a parameter string.
 
     The parameter string has the form:
       feature_name(key=val;key=val;key=val;*)
-    This function is called if the normal init function is called with a feature
-    name that includes parameters (indicated by parenthesis).
+    This function is called automatically if the normal init function is 
+    called with a feature name that includes parameters (indicated by 
+    parenthesis).
 
     Args:
       fs_in: Mandatory frame rate for the feature.
@@ -577,14 +620,29 @@ class Preprocessor(object):
             v = float(v)
           except ValueError:
             pass
-        param_dict[k] = v
-      self._name = name
-      self.init_highpass(param_dict['highpass_cutoff'],
-                         param_dict['highpass_order'])
-      self.init_channel_numbers(param_dict['channel_numbers'])
-    else:
-      self.__init__(self, fs_in, param_string)
 
+        # https://stackoverflow.com/questions/285061/how-do-you-programmatically-set-an-attribute
+        # This string parser only returns a list of channels, but we want a list
+        # of lists, we we embed it here.
+        if k == 'channel_numbers':
+          channels = self.parse_channel_numbers(v)
+          setattr(self, '_channel_numbers', [channels])
+        elif k == 'channels_to_ref':
+          channels = self.parse_channel_numbers(v)
+          setattr(self, '_channels_to_ref', [channels])
+        elif k == 'ref_channels':
+          channels = self.parse_channel_numbers(v)
+          setattr(self, '_ref_channels', [channels])
+        else:
+          setattr(self, f'_{k}', v)
+        
+      self._name = name
+      if 'lowpass_cutoff' in param_list:
+        self.init_lowpass(getattr(self, '_lowpass_cutoff'),
+                          getattr(self, '_lowpass_order'))
+      if 'highpass_cutoff' in param_list:
+        self.init_highpass(getattr(self, '_highpass_cutoff'),
+                          getattr(self, '_highpass_order'))
 
 class AudioFeatures(object):
   """Routines to implement audio feature extraction.

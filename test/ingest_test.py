@@ -20,6 +20,7 @@
 import collections
 import math
 import os
+import subprocess
 import tempfile
 
 from absl import flags
@@ -29,16 +30,21 @@ import scipy.io.wavfile
 import scipy.signal
 from telluride_decoding import ingest
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 class IngestTest(absltest.TestCase):
 
   def setUp(self):
     super(IngestTest, self).setUp()
-    self._test_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/')
+    self._test_dir = os.path.join(flags.FLAGS.test_srcdir, '_main', 'test_data')
+    if not os.path.exists(self._test_dir):
+      # Debugging: If not here, where.
+      subprocess.run(['ls', flags.FLAGS.test_srcdir])
+      subprocess.run(['ls', os.path.join(flags.FLAGS.test_srcdir, '_main')])
+      self.assertTrue(os.path.exists(self._test_dir),
+                      f'Test data dir does not exist: {self._test_dir}')
+
 
   def test_brain_signal(self):
     # Test to make sure fix_offset works with 1d signals.
@@ -378,5 +384,4 @@ class IngestTest(absltest.TestCase):
     np.testing.assert_equal(file_data['two'], 2*positive_data)
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

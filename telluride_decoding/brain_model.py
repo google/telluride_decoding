@@ -27,7 +27,7 @@ import os
 from absl import logging
 import numpy as np
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 # User should call tf.compat.v1.enable_v2_behavior()
 
 

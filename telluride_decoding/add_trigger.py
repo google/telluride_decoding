@@ -41,7 +41,7 @@ import scipy.io.wavfile
 import six
 from six.moves import range
 
-from google3.pyglib import gfile
+from tensorflow.io.gfile import GFile
 
 FLAGS = flags.FLAGS
 
@@ -155,9 +155,7 @@ def read_audio_wave_file(audio_filename):
   if not isinstance(audio_filename, six.string_types):
     raise TypeError('audio_filename must be a string.')
 
-  # Use gfile.Open so we can read files from all sorts of file systems.
-  with gfile.Open(audio_filename) as fp:
-    [fs, audio_signal] = scipy.io.wavfile.read(fp)
+  [fs, audio_signal] = scipy.io.wavfile.read(audio_filename)
   logging.info('Read_audio_file: Read %s samples from %s at %gHz.',
                audio_signal.shape, audio_filename, fs)
   assert audio_signal.dtype == np.int16
@@ -170,9 +168,7 @@ def write_audio_wave_file(audio_filename, audio_signal, fs):
   if not isinstance(audio_signal, np.ndarray):
     raise TypeError('audio_signal must be an np.ndarray')
 
-  # Use gfile.Open so we can read files from all sorts of file systems.
-  with gfile.Open(audio_filename, 'w') as fp:
-    scipy.io.wavfile.write(fp, fs, audio_signal)
+  scipy.io.wavfile.write(audio_filename, fs, audio_signal)
   logging.info('Write_audio_file: wrote %s samples to %s at %gHz.',
                audio_signal.shape, audio_filename, fs)
 

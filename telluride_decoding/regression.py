@@ -44,7 +44,7 @@ from telluride_decoding import brain_data
 from telluride_decoding import csv_util
 from telluride_decoding import decoding
 from telluride_decoding import plot_util
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 # User should call tf.compat.v1.enable_v2_behavior()
 
 
@@ -583,5 +583,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   app.run(main)

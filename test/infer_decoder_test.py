@@ -35,7 +35,8 @@ from telluride_decoding import brain_data
 from telluride_decoding import infer_decoder
 from telluride_decoding import ingest
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+
 flags.DEFINE_string(
     'tmp_dir', os.environ.get('TMPDIR') or '/tmp',
     'Temporary directory location.')
@@ -584,9 +585,9 @@ class InferDecoderTest(parameterized.TestCase):
       """Needed to match functions in saved linear model."""
       return x
 
-    test_model_dir = os.path.join(
-        flags.FLAGS.test_srcdir, '__main__',
-        'test_data/linear_model')
+    # Not sure why I need to add _main to the Bazel path.
+    test_model_dir = os.path.join(flags.FLAGS.test_srcdir, '_main',
+                                  'test_data/linear_model')
     # Make sure these files are where they are supposed to be.
     self.assertTrue(os.path.exists(test_model_dir))
     self.assertTrue(os.path.exists(os.path.join(
@@ -723,5 +724,4 @@ class InferDecoderTest(parameterized.TestCase):
 
 
 if __name__ == '__main__':
-  tf.compat.v1.enable_v2_behavior()
   absltest.main()

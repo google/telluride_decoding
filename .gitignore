@@ -1,0 +1,8 @@
+bazel*
+MODULE*
+**.mat
+**.pyc
+notes.txt
+tmp/*
+**junk**
+**/.DS_Store

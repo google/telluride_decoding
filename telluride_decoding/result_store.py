@@ -26,6 +26,10 @@ The three clases do the following (briefly for context):
   NumpyStore: Basic storage of one signal
   WindowedDataStore: Above, plus retrieve pieces (windows) of the data
   TwoResultStore: Two of the WindowedDataStore, for two signals.
+
+Note: These classes store all data presented to them, growing the internal
+storage as needed to hold all the data.  For efficiency reasons, the internal
+storages grows by a factor of 2 each time it is needed.
 """
 
 from typing import Iterator, Optional, Tuple
@@ -82,8 +86,9 @@ class NumpyStore(object):
     """Creates the storage needed for the signals, increasing size as needed.
 
     This routine allocates the initial storage (an np array) when first called
-    (so it knows how wide the data is), and then doubles the size as necessary,
-    copying the old data into the new array.
+    (so it knows how wide the data is), and then on subsequent calls doubles 
+    the internal storage size as necessary, copying the old data into the new 
+    array.
 
     Args:
       data: A prototype of the data, needed to get the width of the storage.
